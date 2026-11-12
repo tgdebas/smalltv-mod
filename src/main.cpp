@@ -40,6 +40,10 @@
 #include "SonosMode.h"
 #include "SonosClient.h"
 #endif
+#if WITH_SYSMON
+#include "SysmonMode.h"
+#include "SysmonData.h"
+#endif
 #if WITH_HA
 #include "HaBoot.h"
 #include "HaMode.h"
@@ -61,6 +65,9 @@ static DisplayMode* kModes[] = {
 #endif
 #if WITH_SONOS
   &g_sonosMode,
+#endif
+#if WITH_SYSMON
+  &g_sysmonMode,
 #endif
 #if WITH_HA
   &g_haMode,
@@ -92,6 +99,10 @@ static bool carouselHas(const Settings& s, const DisplayMode* m) {
 #if WITH_SONOS
     // Now Playing joins the rotation only while the room is playing.
     case MODE_SONOS:  return s.carouselSonos && sonosActive();
+#endif
+#if WITH_SYSMON
+    // Mac stats join the rotation only while the Mac is sending them.
+    case MODE_SYSMON: return s.carouselSysmon && sysmonFresh(millis());
 #endif
     default:          return true;
   }

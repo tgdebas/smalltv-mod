@@ -228,11 +228,11 @@ struct Settings {
 
   // --- Active feature ---
   String themeId;       // installed .stheme ID; empty until selected
-  uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL / MODE_HA / MODE_SONOS
+  uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL / MODE_HA / MODE_SONOS / MODE_SYSMON
 
   // --- Carousel (mode == MODE_CAROUSEL): dwell + which features rotate ---
   uint16_t carouselSec;
-  bool carouselTicker, carouselUsage, carouselRadar, carouselHa, carouselTheme, carouselSonos;
+  bool carouselTicker, carouselUsage, carouselRadar, carouselHa, carouselTheme, carouselSonos, carouselSysmon;
 
   // --- Shared HTTP / display ---
   uint16_t httpTimeout; // ms

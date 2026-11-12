@@ -149,6 +149,11 @@ jobs:
       - name: Test Sonos response parsing
         run: sh tests/sonos/run.sh
 
+      # Mac stats: the pushed-sample store, its status member, and the
+      # parsers of tools/mac/smalltv-stats.sh on recorded macOS output.
+      - name: Test Mac stats
+        run: sh tests/sysmon/run.sh
+
       # The mDNS library copy in lib/: a response is handled one record at a
       # time (peak: one record alive), and _parseResponse uses that loop.
       - name: Test mDNS answer handling

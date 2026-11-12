@@ -544,6 +544,7 @@ void Settings::setDefaults() {
   carouselTicker = carouselUsage = carouselRadar = carouselHa = true;
   carouselTheme = false;   // opt in: needs an installed theme, else the slot shows an error
   carouselSonos = true;    // shown only while something plays (see SonosMode)
+  carouselSysmon = true;   // shown only while the Mac sends stats (see SysmonMode)
   httpTimeout = DEFAULT_HTTP_TIMEOUT;
 
   brightness = DEFAULT_BRIGHTNESS;
@@ -636,6 +637,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
                             : (s.mode == MODE_USAGE)    ? "usage"
                             : (s.mode == MODE_HA)       ? "ha"
                             : (s.mode == MODE_SONOS)    ? "sonos"
+                            : (s.mode == MODE_SYSMON)   ? "sysmon"
                             : (s.mode == MODE_CAROUSEL) ? "carousel" : "stocks";
   root["carouselSec"]       = s.carouselSec;
   root["carouselTicker"]    = s.carouselTicker;
@@ -644,6 +646,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   root["carouselHa"]        = s.carouselHa;
   root["carouselTheme"]     = s.carouselTheme;
   root["carouselSonos"]     = s.carouselSonos;
+  root["carouselSysmon"]    = s.carouselSysmon;
   root["httpTimeout"]       = s.httpTimeout;
   root["brightness"]        = s.brightness;
   root["autoBrightness"]    = s.autoBrightness;
@@ -714,6 +717,7 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
            : m.equalsIgnoreCase("usage")    ? MODE_USAGE
            : m.equalsIgnoreCase("ha")       ? MODE_HA
            : m.equalsIgnoreCase("sonos")    ? MODE_SONOS
+           : m.equalsIgnoreCase("sysmon")   ? MODE_SYSMON
            : m.equalsIgnoreCase("carousel") ? MODE_CAROUSEL
            : m.equalsIgnoreCase("stocks")   ? MODE_STOCKS
            : s.mode;   // empty or unknown: a save that names no mode keeps the stored one
@@ -734,6 +738,7 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
   if (root["carouselHa"].is<bool>())      s.carouselHa = root["carouselHa"];
   if (root["carouselTheme"].is<bool>())   s.carouselTheme = root["carouselTheme"];
   if (root["carouselSonos"].is<bool>())   s.carouselSonos = root["carouselSonos"];
+  if (root["carouselSysmon"].is<bool>())  s.carouselSysmon = root["carouselSysmon"];
 
   if (root["httpTimeout"].is<int>())        s.httpTimeout = constrain((int)root["httpTimeout"], 1000, 20000);
   if (root["brightness"].is<int>())         s.brightness = constrain((int)root["brightness"], 0, 100);

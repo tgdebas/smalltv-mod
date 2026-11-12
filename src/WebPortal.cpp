@@ -15,6 +15,9 @@
 #include "SonosClient.h"
 #include "SonosMode.h"
 #endif
+#if WITH_SYSMON
+#include "SysmonData.h"
+#endif
 #if WITH_RADAR
 #include "RadarClient.h"
 #endif
@@ -99,7 +102,8 @@ static bool guardRequest() {
 //   - the captive-portal probes, which a phone fires before anyone can type a
 //     password and which only ever redirect,
 //   - /api/usage, the daemon's push endpoint, which has no way to carry
-//     credentials and only writes the numbers on the screen.
+//     credentials and only writes the numbers on the screen,
+//   - /api/sysmon, the Mac stats script's push endpoint, for the same reason.
 // Returns true when the request may proceed; on false it has already answered.
 static bool requireAuth() {
   if (!guardRequest()) return false;
@@ -140,6 +144,7 @@ static void handleGetConfig() {
   feat["ha"]     = (bool)WITH_HA;
   feat["theme"]  = (bool)WITH_THEME;
   feat["sonos"]  = (bool)WITH_SONOS;
+  feat["sysmon"] = (bool)WITH_SYSMON;
   // WireGuard is a per-chip decision rather than a per-feature one: it is
   // compiled only where the image has room for it (the ESP32-C2 build).
 #if defined(SMALLTV_WIREGUARD)
@@ -293,6 +298,17 @@ static void handleStatus() {
     so.roomCount = sonosRoomCount();
     so.roomAt = sonosRoomAt;
     smalltv::writeStatusSonos(out, so);
+  }
+#endif
+#if WITH_SYSMON
+  {
+    smalltv::StatusSysmon sm;
+    uint32_t now = millis();
+    sm.fresh = sysmonFresh(now);
+    sm.ago = sysmonLastMs() ? (long)((now - sysmonLastMs()) / 1000) : -1;
+    const SysmonSample& v = sysmonSample();
+    sm.cpu = v.cpu; sm.mem = v.mem; sm.disk = v.disk; sm.rx = v.rxMbps; sm.tx = v.txMbps;
+    smalltv::writeStatusSysmon(out, sm);
   }
 #endif
   smalltv::writeStatusEnd(out);
@@ -538,6 +554,23 @@ static void handleUsagePush() {
               ok ? "{\"ok\":true}" : "{\"ok\":false}");
 }
 
+// The Mac's stats from tools/mac/smalltv-stats.sh: form or query fields
+// cpu, mem, disk (percent) and rx, tx (Mbit/s). Like /api/usage it only sets
+// numbers on the screen, so it stays outside the web password: the script
+// would otherwise have to store it.
+static void handleSysmonPush() {
+  if (!guardRequest()) return;
+#if WITH_SYSMON
+  bool ok = sysmonApply(server.arg("cpu").c_str(), server.arg("mem").c_str(),
+                        server.arg("disk").c_str(), server.arg("rx").c_str(),
+                        server.arg("tx").c_str(), millis());
+#else
+  bool ok = false;
+#endif
+  server.send(ok ? 200 : 400, "application/json",
+              ok ? "{\"ok\":true}" : "{\"ok\":false}");
+}
+
 // Prompt activity from Claude Code hooks: /api/activity?state=running|done|idle.
 // A query argument rather than JSON so a hook is a single curl with no quoting.
 // Behind the password like /api/notify, for the same reason.
@@ -718,6 +751,7 @@ void webPortalBegin(Settings& settings) {
   server.on("/api/selfupdate", HTTP_POST, handleSelfUpdate);
   server.on("/api/usage", HTTP_POST, handleUsagePush);   // daemon pushes usage here
   server.on("/api/activity", HTTP_POST, handleActivity); // Claude Code hooks
+  server.on("/api/sysmon", HTTP_POST, handleSysmonPush); // Mac stats script
 #if WITH_HA
   server.on("/api/ha/clear", HTTP_POST, handleHaClear);  // purge HA screens (device + broker retained)
 #endif

@@ -91,6 +91,13 @@ struct StatusSonos {
   const char* (*roomAt)(uint8_t) = nullptr;
 };
 
+// Mac stats (features/sysmon): the last sample and how old it is.
+struct StatusSysmon {
+  bool fresh = false;
+  long ago = -1;                  // seconds since the last push, -1 = never
+  float cpu = 0, mem = 0, disk = 0, rx = 0, tx = 0;
+};
+
 namespace statusout {
 // `,"key":` (the key is a PSTR literal with its comma and quotes), then the value.
 template <class Out> void member(Out& out, const char* key, const char* v) {
@@ -213,6 +220,20 @@ template <class Out> void writeStatusSonos(Out& out, const StatusSonos& r) {
     jsonout::text(out, r.roomAt(i));
   }
   jsonout::raw(out, PSTR("]}"));
+}
+
+template <class Out> void writeStatusSysmon(Out& out, const StatusSysmon& r) {
+  using statusout::member;
+  member(out, PSTR(",\"sysmon\":{\"fresh\":"), r.fresh);
+  member(out, PSTR(",\"ago\":"), (int32_t)r.ago);
+  if (r.ago >= 0) {
+    member(out, PSTR(",\"cpu\":"), r.cpu);
+    member(out, PSTR(",\"mem\":"), r.mem);
+    member(out, PSTR(",\"disk\":"), r.disk);
+    member(out, PSTR(",\"rx\":"), r.rx);
+    member(out, PSTR(",\"tx\":"), r.tx);
+  }
+  jsonout::raw(out, PSTR("}"));
 }
 
 // Closes the object and sends the last piece.
