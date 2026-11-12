@@ -143,6 +143,7 @@
 #define MODE_THEME     6             // declarative installed clock faces
 #define MODE_HA        5             // Home Assistant screens pushed over MQTT
 #define MODE_SONOS     7             // Sonos now playing (album art + title), read from the speakers
+#define MODE_SYSMON    8             // the Mac's CPU/memory/disk/network, pushed by tools/mac/smalltv-stats.sh
 #define DEFAULT_MODE MODE_STOCKS
 #define DEFAULT_CAROUSEL_SEC 30      // per-mode dwell in carousel
 
@@ -271,6 +272,9 @@
 #endif
 #ifndef WITH_SONOS
 #define WITH_SONOS 1
+#endif
+#ifndef WITH_SYSMON
+#define WITH_SYSMON 1
 #endif
 
 // Sonos now playing (MODE_SONOS, features/sonos). The device talks UPnP to the

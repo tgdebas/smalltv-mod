@@ -86,11 +86,16 @@ static void testImport() {
 static void testSonos() {
   CHECK(after(MODE_STOCKS, "{\"mode\":\"sonos\"}") == MODE_SONOS, "sonos");
   CHECK(after(MODE_SONOS, "{\"mode\":\"\"}") == MODE_SONOS, "sonos kept");
+  CHECK(after(MODE_STOCKS, "{\"mode\":\"sysmon\"}") == MODE_SYSMON, "sysmon");
+  CHECK(after(MODE_SYSMON, "{\"mode\":\"\"}") == MODE_SYSMON, "sysmon kept");
 
   Settings s;
   s.setDefaults();
   CHECK(s.sonos.room == "" && s.sonos.host == "", "defaults: follow first group, discover a speaker");
   CHECK(s.carouselSonos, "now playing joins the carousel by default");
+  CHECK(s.carouselSysmon, "Mac stats join the carousel by default");
+  apply(s, "{\"carouselSysmon\":false}");
+  CHECK(!s.carouselSysmon, "carouselSysmon saved");
   apply(s, "{\"sonos\":{\"room\":\"  Living Room \",\"host\":\"http://192.168.1.20:1400/xml/x.xml\",\"pollSec\":1}}");
   CHECK(s.sonos.room == "Living Room", "room trimmed: %s", s.sonos.room.c_str());
   CHECK(s.sonos.host == "192.168.1.20", "host from URL: %s", s.sonos.host.c_str());

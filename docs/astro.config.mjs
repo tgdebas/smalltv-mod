@@ -50,6 +50,7 @@ export default defineConfig({
             { label: 'Claude usage meter', link: '/features/usage/' },
             { label: 'Plane radar', link: '/features/radar/' },
             { label: 'Sonos now playing', link: '/features/sonos/' },
+            { label: 'Mac stats', link: '/features/sysmon/' },
             { label: 'WireGuard VPN', link: '/features/wireguard/' },
             { label: 'Notifications', link: '/features/notify/' },
             { label: 'Theme clocks', link: '/features/themes/' },
