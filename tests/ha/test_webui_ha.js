@@ -19,7 +19,7 @@ function statusRows(s){
  const els={};
  const el=id=>els[id]||(els[id]={id,textContent:'',innerHTML:'',className:'',href:''});
  const ctx={$:el,C:{},window:{},statusTimer:0,
-  sunNowText:()=>null,fmtUp:()=>'1m',radarLine:()=>'',wgLine:()=>'',
+  sunNowText:()=>null,fmtUp:()=>'1m',radarLine:()=>'',wgLine:()=>'',sonosLine:()=>'',sonosShow:()=>{},
   setTimeout,clearTimeout};
  vm.createContext(ctx);
  vm.runInContext(note+kvCode+showStatus,ctx);

@@ -392,6 +392,43 @@ void HaSettings::fromJson(JsonObjectConst o) {
 }
 
 // ===========================================================================
+// Sonos slice
+// ===========================================================================
+void SonosSettings::setDefaults() {
+  room = "";
+  host = "";
+  pollSec = DEFAULT_SONOS_POLL_SEC;
+  showArtist = true;
+}
+
+void SonosSettings::toJson(JsonObject o) const {
+  o["room"]       = room;
+  o["host"]       = host;
+  o["pollSec"]    = pollSec;
+  o["showArtist"] = showArtist;
+}
+
+void SonosSettings::fromJson(JsonObjectConst o) {
+  if (o["room"].is<const char*>()) {
+    room = o["room"].as<String>();
+    room.trim();
+    if (room.length() >= MAX_SONOS_ROOM_LEN) room = room.substring(0, MAX_SONOS_ROOM_LEN - 1);
+  }
+  if (o["host"].is<const char*>()) {
+    host = o["host"].as<String>();
+    host.trim();
+    // Accept a pasted URL ("http://192.168.1.20:1400/") and keep only the host.
+    int p = host.indexOf("://");
+    if (p >= 0) host = host.substring(p + 3);
+    p = host.indexOf(':'); if (p >= 0) host = host.substring(0, p);
+    p = host.indexOf('/'); if (p >= 0) host = host.substring(0, p);
+    if (host.length() >= MAX_SONOS_HOST_LEN) host = "";
+  }
+  if (o["pollSec"].is<int>())     pollSec = constrain((int)o["pollSec"], 2, 600);
+  if (o["showArtist"].is<bool>()) showArtist = o["showArtist"];
+}
+
+// ===========================================================================
 // Radar slice
 // ===========================================================================
 void RadarSettings::setDefaults() {
@@ -506,6 +543,7 @@ void Settings::setDefaults() {
   carouselSec = DEFAULT_CAROUSEL_SEC;
   carouselTicker = carouselUsage = carouselRadar = carouselHa = true;
   carouselTheme = false;   // opt in: needs an installed theme, else the slot shows an error
+  carouselSonos = true;    // shown only while something plays (see SonosMode)
   httpTimeout = DEFAULT_HTTP_TIMEOUT;
 
   brightness = DEFAULT_BRIGHTNESS;
@@ -516,6 +554,7 @@ void Settings::setDefaults() {
   ticker.setDefaults();
   usage.setDefaults();
   radar.setDefaults();
+  sonos.setDefaults();
   ha.setDefaults();
   clock.setDefaults();
   display.setDefaults();
@@ -596,6 +635,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
                             : (s.mode == MODE_RADAR)    ? "radar"
                             : (s.mode == MODE_USAGE)    ? "usage"
                             : (s.mode == MODE_HA)       ? "ha"
+                            : (s.mode == MODE_SONOS)    ? "sonos"
                             : (s.mode == MODE_CAROUSEL) ? "carousel" : "stocks";
   root["carouselSec"]       = s.carouselSec;
   root["carouselTicker"]    = s.carouselTicker;
@@ -603,6 +643,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   root["carouselRadar"]     = s.carouselRadar;
   root["carouselHa"]        = s.carouselHa;
   root["carouselTheme"]     = s.carouselTheme;
+  root["carouselSonos"]     = s.carouselSonos;
   root["httpTimeout"]       = s.httpTimeout;
   root["brightness"]        = s.brightness;
   root["autoBrightness"]    = s.autoBrightness;
@@ -613,6 +654,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   s.ticker.toJson(root["ticker"].to<JsonObject>());
   s.usage.toJson(root["usage"].to<JsonObject>());
   s.radar.toJson(root["radar"].to<JsonObject>());
+  s.sonos.toJson(root["sonos"].to<JsonObject>());
   s.ha.toJson(root["ha"].to<JsonObject>(), includeSecrets);
   s.clock.toJson(root["clock"].to<JsonObject>());
   s.display.toJson(root["display"].to<JsonObject>());
@@ -671,6 +713,7 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
            : m.equalsIgnoreCase("radar")    ? MODE_RADAR
            : m.equalsIgnoreCase("usage")    ? MODE_USAGE
            : m.equalsIgnoreCase("ha")       ? MODE_HA
+           : m.equalsIgnoreCase("sonos")    ? MODE_SONOS
            : m.equalsIgnoreCase("carousel") ? MODE_CAROUSEL
            : m.equalsIgnoreCase("stocks")   ? MODE_STOCKS
            : s.mode;   // empty or unknown: a save that names no mode keeps the stored one
@@ -690,6 +733,7 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
   if (root["carouselRadar"].is<bool>())   s.carouselRadar = root["carouselRadar"];
   if (root["carouselHa"].is<bool>())      s.carouselHa = root["carouselHa"];
   if (root["carouselTheme"].is<bool>())   s.carouselTheme = root["carouselTheme"];
+  if (root["carouselSonos"].is<bool>())   s.carouselSonos = root["carouselSonos"];
 
   if (root["httpTimeout"].is<int>())        s.httpTimeout = constrain((int)root["httpTimeout"], 1000, 20000);
   if (root["brightness"].is<int>())         s.brightness = constrain((int)root["brightness"], 0, 100);
@@ -706,6 +750,7 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
   s.usage.fromJson(u);
   // Radar has no legacy flat layout; only apply when its nested object is present.
   if (root["radar"].is<JsonObjectConst>()) s.radar.fromJson(root["radar"].as<JsonObjectConst>());
+  if (root["sonos"].is<JsonObjectConst>()) s.sonos.fromJson(root["sonos"].as<JsonObjectConst>());
   // HA has no legacy flat layout either; only apply when its object is present.
   if (root["ha"].is<JsonObjectConst>()) s.ha.fromJson(root["ha"].as<JsonObjectConst>());
   if (root["clock"].is<JsonObjectConst>()) s.clock.fromJson(root["clock"].as<JsonObjectConst>());

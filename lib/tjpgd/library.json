@@ -1,0 +1,8 @@
+{
+  "name": "tjpgd",
+  "version": "0.3.0",
+  "description": "ChaN's TJpgDec R0.03 (via Bodmer/TJpg_Decoder), vendored for streaming album art decode.",
+  "license": "custom: no restriction on use, see header of tjpgd.c",
+  "frameworks": "*",
+  "platforms": "*"
+}

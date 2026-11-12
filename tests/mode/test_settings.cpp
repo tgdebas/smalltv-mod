@@ -81,7 +81,34 @@ static void testImport() {
   CHECK(s.hostname == "smalltv-test-2", "the rest of the import applies");
 }
 
+// Sonos: the mode token round-trips, and the speaker field keeps only the host
+// when a URL is pasted into it.
+static void testSonos() {
+  CHECK(after(MODE_STOCKS, "{\"mode\":\"sonos\"}") == MODE_SONOS, "sonos");
+  CHECK(after(MODE_SONOS, "{\"mode\":\"\"}") == MODE_SONOS, "sonos kept");
+
+  Settings s;
+  s.setDefaults();
+  CHECK(s.sonos.room == "" && s.sonos.host == "", "defaults: follow first group, discover a speaker");
+  CHECK(s.carouselSonos, "now playing joins the carousel by default");
+  apply(s, "{\"sonos\":{\"room\":\"  Living Room \",\"host\":\"http://192.168.1.20:1400/xml/x.xml\",\"pollSec\":1}}");
+  CHECK(s.sonos.room == "Living Room", "room trimmed: %s", s.sonos.room.c_str());
+  CHECK(s.sonos.host == "192.168.1.20", "host from URL: %s", s.sonos.host.c_str());
+  CHECK(s.sonos.pollSec == 2, "poll clamped to 2 s: %u", s.sonos.pollSec);
+  apply(s, "{\"sonos\":{\"showArtist\":false}}");
+  CHECK(s.sonos.room == "Living Room" && !s.sonos.showArtist, "partial save keeps the rest");
+
+  JsonDocument doc;
+  settingsToJson(s, doc.to<JsonObject>(), false);
+  CHECK(strcmp(doc["sonos"]["host"] | "", "192.168.1.20") == 0, "exported");
+  s.mode = MODE_SONOS;
+  JsonDocument doc2;
+  settingsToJson(s, doc2.to<JsonObject>(), false);
+  CHECK(strcmp(doc2["mode"] | "", "sonos") == 0, "mode exported as sonos");
+}
+
 int main() {
+  testSonos();
   testNamesSetTheMode();
   testEmptyMode();
   testUnknownMode();

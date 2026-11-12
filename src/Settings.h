@@ -189,6 +189,18 @@ struct RadarSettings {
   void fromJson(JsonObjectConst o);
 };
 
+// ---- Sonos now playing slice --------------------------------------------------
+struct SonosSettings {
+  String   room;          // Sonos room to follow ("" = the first group found)
+  String   host;          // a speaker's IP to ask; "" = find one with SSDP
+  uint16_t pollSec;       // track refresh period
+  bool     showArtist;    // artist line under the title
+
+  void setDefaults();
+  void toJson(JsonObject o) const;
+  void fromJson(JsonObjectConst o);
+};
+
 // ---- Physical button slice (device-wide) -----------------------------------
 // Only acted on where BTN_PIN exists, but the fields persist everywhere so a
 // config export/import round-trips across boards. sensitivity is the touch press
@@ -216,11 +228,11 @@ struct Settings {
 
   // --- Active feature ---
   String themeId;       // installed .stheme ID; empty until selected
-  uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL / MODE_HA
+  uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL / MODE_HA / MODE_SONOS
 
   // --- Carousel (mode == MODE_CAROUSEL): dwell + which features rotate ---
   uint16_t carouselSec;
-  bool carouselTicker, carouselUsage, carouselRadar, carouselHa, carouselTheme;
+  bool carouselTicker, carouselUsage, carouselRadar, carouselHa, carouselTheme, carouselSonos;
 
   // --- Shared HTTP / display ---
   uint16_t httpTimeout; // ms
@@ -233,6 +245,7 @@ struct Settings {
   TickerSettings  ticker;
   UsageSettings   usage;
   RadarSettings   radar;
+  SonosSettings   sonos;     // Sonos now playing
   HaSettings      ha;        // MQTT broker for HA screens
   ClockSettings   clock;
   DisplaySettings display;   // panel colour correction

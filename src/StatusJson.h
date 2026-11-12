@@ -77,6 +77,20 @@ struct StatusRadar {
   const char* url = "";         // left out when empty
 };
 
+// Sonos now playing (features/sonos).
+struct StatusSonos {
+  const char* stage = "";
+  bool error = false;
+  const char* room = "";          // room actually followed
+  const char* coordinator = "";   // speaker polled for the track
+  const char* state = "";         // playing / paused / stopped / transitioning
+  const char* title = "";
+  const char* artist = "";
+  const char* art = "";           // outcome of the last cover draw
+  uint8_t roomCount = 0;
+  const char* (*roomAt)(uint8_t) = nullptr;
+};
+
 namespace statusout {
 // `,"key":` (the key is a PSTR literal with its comma and quotes), then the value.
 template <class Out> void member(Out& out, const char* key, const char* v) {
@@ -181,6 +195,24 @@ template <class Out> void writeStatusRadar(Out& out, const StatusRadar& r) {
   if (r.hasOk) member(out, PSTR(",\"okAgo\":"), r.okAgo);
   if (r.url[0]) member(out, PSTR(",\"url\":"), r.url);
   jsonout::raw(out, PSTR("}"));
+}
+
+template <class Out> void writeStatusSonos(Out& out, const StatusSonos& r) {
+  using statusout::member;
+  member(out, PSTR(",\"sonos\":{\"stage\":"), r.stage);
+  member(out, PSTR(",\"error\":"), r.error);
+  member(out, PSTR(",\"room\":"), r.room);
+  member(out, PSTR(",\"coordinator\":"), r.coordinator);
+  member(out, PSTR(",\"state\":"), r.state);
+  member(out, PSTR(",\"title\":"), r.title);
+  member(out, PSTR(",\"artist\":"), r.artist);
+  member(out, PSTR(",\"art\":"), r.art);
+  jsonout::raw(out, PSTR(",\"rooms\":["));
+  for (uint8_t i = 0; i < r.roomCount && r.roomAt; i++) {
+    if (i) jsonout::raw(out, PSTR(","));
+    jsonout::text(out, r.roomAt(i));
+  }
+  jsonout::raw(out, PSTR("]}"));
 }
 
 // Closes the object and sends the last piece.

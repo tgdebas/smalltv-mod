@@ -36,6 +36,10 @@
 #if WITH_RADAR
 #include "RadarMode.h"
 #endif
+#if WITH_SONOS
+#include "SonosMode.h"
+#include "SonosClient.h"
+#endif
 #if WITH_HA
 #include "HaBoot.h"
 #include "HaMode.h"
@@ -54,6 +58,9 @@ static DisplayMode* kModes[] = {
 #endif
 #if WITH_RADAR
   &g_radarMode,
+#endif
+#if WITH_SONOS
+  &g_sonosMode,
 #endif
 #if WITH_HA
   &g_haMode,
@@ -81,6 +88,10 @@ static bool carouselHas(const Settings& s, const DisplayMode* m) {
 #endif
 #if WITH_THEME
     case MODE_THEME:  return s.carouselTheme;
+#endif
+#if WITH_SONOS
+    // Now Playing joins the rotation only while the room is playing.
+    case MODE_SONOS:  return s.carouselSonos && sonosActive();
 #endif
     default:          return true;
   }
@@ -485,6 +496,12 @@ void loop() {
 #endif
 
   DisplayMode* m = activeMode(g_settings);
+#if WITH_SONOS
+  // In the carousel, keep reading the Sonos state while other pages show, so
+  // Now Playing can join the rotation when music starts.
+  if (g_settings.mode == MODE_CAROUSEL && g_settings.carouselSonos && m != &g_sonosMode)
+    sonosService(g_settings, true);
+#endif
   if (m) {
     if (restore) m->wake(g_settings);
     m->service(g_settings);
