@@ -37,7 +37,7 @@ static void ellipsize(Arduino_GFX* g, char* s, int maxW) {
     do { n--; } while (n > 0 && ((uint8_t)s[n] & 0xC0) == 0x80);   // whole UTF-8 chars
     while (n > 0 && s[n - 1] == ' ') n--;
     s[n] = 0;
-    char probe[100];
+    char probe[104];
     snprintf(probe, sizeof(probe), "%s...", s);
     if (textWidth(g, probe) <= maxW) { strlcpy(s, probe, 100); return; }
   }
@@ -81,7 +81,7 @@ void SonosMode::invalidate(const Settings& s) {
   sonosInit(s);
   sonosForceRefresh();
   needFull_ = true;
-  shownArt_[0] = 0;
+  shownKey_ = 0;
 }
 
 const char* SonosMode::artStatus() const {
@@ -151,9 +151,8 @@ void SonosMode::service(const Settings& s) {
   seenVersion_ = sonosVersion();
   shownStage_ = stage;
 
-  bool sameTrack = kind == K_TRACK && shownKind_ == K_TRACK &&
-                   !strcmp(t.title, shownTitle_) && !strcmp(t.artist, shownArtist_) &&
-                   !strcmp(t.artUrl, shownArt_);
+  uint32_t key = sonosTrackKey(t);
+  bool sameTrack = kind == K_TRACK && shownKind_ == K_TRACK && key == shownKey_;
   if (!needFull_ && sameTrack) {
     if (paused != shownPaused_) { shownPaused_ = paused; renderBadge(); }
     return;
@@ -163,8 +162,6 @@ void SonosMode::service(const Settings& s) {
   needFull_ = false;
   shownKind_ = kind;
   shownPaused_ = paused;
-  strlcpy(shownTitle_, t.title, sizeof(shownTitle_));
-  strlcpy(shownArtist_, t.artist, sizeof(shownArtist_));
-  strlcpy(shownArt_, t.artUrl, sizeof(shownArt_));
+  shownKey_ = key;
   renderFull(s);
 }

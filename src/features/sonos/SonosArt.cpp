@@ -11,7 +11,7 @@
 #define ART_POOL_BYTES 4096
 
 namespace {
-struct Session {
+struct ArtSession {
   Client*  in;
   int32_t  left;        // Content-Length still to read, -1 = unknown
   uint32_t deadline;
@@ -22,7 +22,7 @@ struct Session {
 // Input callback: fill buf (or skip when buf is null) with exactly n bytes,
 // fewer only at the end of the stream.
 size_t artInput(JDEC* jd, uint8_t* buf, size_t n) {
-  Session* s = (Session*)jd->device;
+  ArtSession* s = (ArtSession*)jd->device;
   size_t done = 0;
   uint8_t sink[64];
   while (done < n) {
@@ -50,7 +50,7 @@ size_t artInput(JDEC* jd, uint8_t* buf, size_t n) {
 // Output callback: one decoded block, RGB565. Clips to the art box and
 // applies the panel colour correction the rest of the UI gets via gfxTint.
 int artOutput(JDEC* jd, void* bitmap, JRECT* r) {
-  Session* s = (Session*)jd->device;
+  ArtSession* s = (ArtSession*)jd->device;
   uint16_t* px = (uint16_t*)bitmap;
   int w = r->right - r->left + 1;
   int h = r->bottom - r->top + 1;
@@ -120,7 +120,7 @@ ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutM
   std::unique_ptr<uint8_t[]> pool(new (std::nothrow) uint8_t[ART_POOL_BYTES]);
   if (!pool) { http.end(); return ART_LOW_HEAP; }
 
-  Session s;
+  ArtSession s;
   s.in = &http.getStream();
   s.left = http.getSize();
   s.deadline = millis() + (uint32_t)timeoutMs * 2;   // a cover is ~50-150 KB

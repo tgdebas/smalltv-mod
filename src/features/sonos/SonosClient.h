@@ -16,7 +16,8 @@
 #define SONOS_TITLE_LEN   96
 #define SONOS_ARTIST_LEN  64
 #define SONOS_ART_LEN    320
-#define SONOS_MAX_ROOMS   16
+#define SONOS_MAX_ROOMS   12
+#define SONOS_LIST_NAME   32   // room picker entries (matching uses the full name)
 #define SONOS_ROOM_NAME   48   // = MAX_SONOS_ROOM_LEN, so a saved name always fits
 
 enum SonosPlay : uint8_t {
@@ -53,7 +54,9 @@ void sonosService(const Settings& s, bool background = false);
 void sonosForceRefresh();                 // poll on the next service() call
 
 const SonosTrack& sonosTrack();
-uint32_t    sonosVersion();               // bumps whenever title/artist/art changes
+uint32_t    sonosVersion();               // bumps whenever title/artist/art/state changes
+// Fingerprint of a track's title, artist and art URL (not its play state).
+uint32_t    sonosTrackKey(const SonosTrack& t);
 bool        sonosError();                 // most recent request failed
 SonosStage  sonosStage();
 const char* sonosStageName();

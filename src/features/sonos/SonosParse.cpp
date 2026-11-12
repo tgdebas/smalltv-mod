@@ -3,6 +3,9 @@
 #include <strings.h>
 #include <stdio.h>
 
+// Literals go through PSTR: on the ESP8266 a plain string constant takes RAM
+// for good, and this file is all tag and attribute names.
+
 bool sonosHostFromUrl(const char* url, char* out, size_t outLen) {
   const char* p = strstr(url, "://");
   if (!p) return false;
@@ -20,12 +23,12 @@ SonosPlay sonosParseTransport(XmlScanner& x) {
   while ((k = x.next()) != XmlScanner::END) {
     if (k == XmlScanner::TAG) {
       xmlTagName(x.value(), name, sizeof(name));
-      inState = x.value()[0] != '/' && !strcmp(name, "CurrentTransportState");
+      inState = x.value()[0] != '/' && !strcmp_P(name, PSTR("CurrentTransportState"));
     } else if (inState) {
       const char* v = x.value();
-      return !strcmp(v, "PLAYING")         ? SONOS_PLAYING
-           : !strcmp(v, "PAUSED_PLAYBACK") ? SONOS_PAUSED
-           : !strcmp(v, "TRANSITIONING")   ? SONOS_TRANSITIONING
+      return !strcmp_P(v, PSTR("PLAYING"))         ? SONOS_PLAYING
+           : !strcmp_P(v, PSTR("PAUSED_PLAYBACK")) ? SONOS_PAUSED
+           : !strcmp_P(v, PSTR("TRANSITIONING"))   ? SONOS_TRANSITIONING
                                            : SONOS_STOPPED;
     }
   }
@@ -50,12 +53,12 @@ bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool&
       size_t tl = strlen(tag);
       if (tag[0] == '/' || (tl && tag[tl - 1] == '/')) { f = PF_NONE; continue; }
       xmlTagName(tag, name, sizeof(name));
-      f = !strcmp(name, "TrackURI")         ? PF_URI
-        : !strcmp(name, "dc:title")         ? PF_TITLE
-        : !strcmp(name, "dc:creator")       ? PF_CREATOR
-        : !strcmp(name, "upnp:album")       ? PF_ALBUM
-        : !strcmp(name, "upnp:albumArtURI") ? PF_ART
-        : !strcmp(name, "r:streamContent")  ? PF_STREAM
+      f = !strcmp_P(name, PSTR("TrackURI"))         ? PF_URI
+        : !strcmp_P(name, PSTR("dc:title"))         ? PF_TITLE
+        : !strcmp_P(name, PSTR("dc:creator"))       ? PF_CREATOR
+        : !strcmp_P(name, PSTR("upnp:album"))       ? PF_ALBUM
+        : !strcmp_P(name, PSTR("upnp:albumArtURI")) ? PF_ART
+        : !strcmp_P(name, PSTR("r:streamContent"))  ? PF_STREAM
                                             : PF_NONE;
       continue;
     }
@@ -78,16 +81,16 @@ bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool&
   }
 
   // A grouped room's own transport points at its coordinator.
-  if (!strncmp(uri, "x-rincon:", 9)) { redirect = true; return false; }
+  if (!strncmp_P(uri, PSTR("x-rincon:"), 9)) { redirect = true; return false; }
 
   // Inputs with no track metadata.
-  if (!strncmp(uri, "x-sonos-htastream:", 18)) { strlcpy(t.title, "TV", sizeof(t.title)); t.artist[0] = 0; }
-  else if (!strncmp(uri, "x-rincon-stream:", 16)) { strlcpy(t.title, "Line-In", sizeof(t.title)); t.artist[0] = 0; }
+  if (!strncmp_P(uri, PSTR("x-sonos-htastream:"), 18)) { xmlCopyP(t.title, PSTR("TV"), sizeof(t.title)); t.artist[0] = 0; }
+  else if (!strncmp_P(uri, PSTR("x-rincon-stream:"), 16)) { xmlCopyP(t.title, PSTR("Line-In"), sizeof(t.title)); t.artist[0] = 0; }
 
   // Radio: the live "Artist - Title" is in streamContent; dc:title is then
   // the station or the stream URL. ZPSTR_* are Sonos status placeholders
   // ("connecting", "buffering").
-  if (stream[0] && strncmp(stream, "ZPSTR_", 6)) {
+  if (stream[0] && strncmp_P(stream, PSTR("ZPSTR_"), 6)) {
     char* dash = strstr(stream, " - ");
     if (dash) {
       *dash = 0;
@@ -105,12 +108,12 @@ bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool&
   // A URL that does not fit is dropped, not cut: a truncated one only 404s.
   if (art[0] == '/') {
     char host[64];
-    int hn = snprintf(host, sizeof(host), "http://%s:%d", coordIp, 1400);
+    int hn = snprintf_P(host, sizeof(host), PSTR("http://%s:%d"), coordIp, 1400);
     if (hn > 0 && (size_t)hn < sizeof(host) && hn + strlen(art) < sizeof(t.artUrl)) {
       memcpy(t.artUrl, host, hn);
       strlcpy(t.artUrl + hn, art, sizeof(t.artUrl) - hn);
     }
-  } else if (!strncmp(art, "http", 4) && strlen(art) < sizeof(t.artUrl)) {
+  } else if (!strncmp_P(art, PSTR("http"), 4) && strlen(art) < sizeof(t.artUrl)) {
     strlcpy(t.artUrl, art, sizeof(t.artUrl));
   }
   t.hasTrack = t.title[0] || t.artUrl[0];
@@ -135,9 +138,9 @@ bool sonosParseTopology(XmlScanner& x, const char* want, SonosTopology& out,
     bool closing = tag[0] == '/';
     xmlTagName(tag, name, sizeof(name));
 
-    if (!strcmp(name, "ZoneGroup")) {
+    if (!strcmp_P(name, PSTR("ZoneGroup"))) {
       if (!closing) {
-        xmlAttr(tag, "Coordinator", groupCoord, sizeof(groupCoord));
+        xmlAttr(tag, PSTR("Coordinator"), groupCoord, sizeof(groupCoord));
         groupCoordIp[0] = 0;
         groupHasRoom = false;
       } else if (groupHasRoom && groupCoordIp[0] && !out.coordIp[0]) {
@@ -146,14 +149,14 @@ bool sonosParseTopology(XmlScanner& x, const char* want, SonosTopology& out,
       }
       continue;
     }
-    if (closing || strcmp(name, "ZoneGroupMember")) continue;   // Satellites etc.
+    if (closing || strcmp_P(name, PSTR("ZoneGroupMember"))) continue;   // Satellites etc.
 
     char uuid[40], ip[SONOS_IP_LEN], zone[SONOS_ROOM_NAME];
-    xmlAttr(tag, "UUID", uuid, sizeof(uuid));
-    xmlAttr(tag, "Location", attr, sizeof(attr));
+    xmlAttr(tag, PSTR("UUID"), uuid, sizeof(uuid));
+    xmlAttr(tag, PSTR("Location"), attr, sizeof(attr));
     if (!sonosHostFromUrl(attr, ip, sizeof(ip))) ip[0] = 0;
-    xmlAttr(tag, "ZoneName", zone, sizeof(zone));
-    bool invisible = xmlAttr(tag, "Invisible", attr, sizeof(attr)) && attr[0] == '1';
+    xmlAttr(tag, PSTR("ZoneName"), zone, sizeof(zone));
+    bool invisible = xmlAttr(tag, PSTR("Invisible"), attr, sizeof(attr)) && attr[0] == '1';
 
     if (!strcmp(uuid, groupCoord)) {
       strlcpy(groupCoordIp, ip, sizeof(groupCoordIp));

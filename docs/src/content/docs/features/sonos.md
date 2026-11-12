@@ -1,0 +1,38 @@
+---
+title: Sonos now playing
+description: The album art and track title of whatever a Sonos room is playing, read straight from the speakers on your network.
+---
+
+Switch **Display → Mode** to **Sonos now playing** and set it up in the **Sonos** tab. The screen shows the album cover of the track a Sonos room is playing, with the title under it and, if you want, the artist.
+
+The device asks the speakers themselves, over your home network. There is no Sonos account to link, no cloud service, and nothing to install on your computer. Whatever starts the music doesn't matter: the Sonos app on a Mac or phone, Spotify Connect, AirPlay, or the buttons on the speaker. The screen shows what the room is playing.
+
+## Pick a room
+
+Type the room name exactly as the Sonos app shows it, for example `Living Room`. Upper and lower case don't matter. Once the device has found your speakers, the **Rooms found** line under the field lists them, and the field suggests them as you type.
+
+If the room is grouped with others, the screen follows the group, so it shows the same track as the Sonos app. When you regroup rooms, the device follows the change, usually within seconds and at most within a minute.
+
+Leave the room blank and the device follows the first group it finds.
+
+## Finding the speakers
+
+By default the device finds a speaker by itself with a network search (SSDP), the same way the Sonos app does. Some networks block that search, mostly guest networks, some mesh WiFi systems, and networks that keep the SmallTV on a separate VLAN from the speakers. If the **Now playing** card says *no speaker found*, enter the IP address of any one of your Sonos speakers in **Speaker IP**. The Sonos app lists each speaker's IP address in its system information (where that lives depends on the app version), and your router's list of connected devices shows it too. Give that speaker a fixed address (a DHCP reservation in your router) so it doesn't change.
+
+## What it shows
+
+- **Music:** the album art and the track title, with the artist under it when **Artist under the title** is ticked. If a track has no artist, the album name is shown instead.
+- **Radio:** when the station sends the current song, the song and artist; otherwise the station name.
+- **TV and line-in:** *TV* or *Line-In*, with a music-note icon.
+- **Paused:** the same screen with a pause badge in the top-right corner. Pausing or resuming does not reload the cover.
+- **Nothing playing:** a music note, *Nothing playing*, and the room name.
+
+Album art comes from the speaker, which fetches it from the music service and serves it over plain HTTP. The device decodes it as it downloads, scaled down to fit the screen, so a full-size cover never has to fit in memory. Covers in a format the decoder cannot read (progressive JPEG or PNG) show a music-note icon instead. The **Now playing** card's **Album art** line says why a cover did not show.
+
+## In the carousel
+
+Tick **Sonos now playing** in the carousel list and the page joins the rotation **only while music is playing**. While another page is on screen, the device checks the room every 10 seconds, so the Now Playing page shows up shortly after the music starts. It stays in the rotation for five minutes after you pause, then drops out until the music starts again.
+
+## Refresh rate
+
+**Refresh (s)** sets how often the device asks the room what is playing while the page is on screen. The default is 3 seconds. Each refresh is two short requests on your local network.

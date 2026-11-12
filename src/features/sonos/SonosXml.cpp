@@ -50,7 +50,9 @@ void xmlUnescape(char* s) {
   *w = 0;
 }
 
-bool xmlAttr(const char* tag, const char* name, char* out, size_t outLen) {
+bool xmlAttr(const char* tag, const char* nameP, char* out, size_t outLen) {
+  char name[24];
+  xmlCopyP(name, nameP, sizeof(name));
   size_t nl = strlen(name);
   for (const char* p = tag; (p = strstr(p, name)) != nullptr; p += nl) {
     // Whole attribute name only: preceded by whitespace, followed by =".

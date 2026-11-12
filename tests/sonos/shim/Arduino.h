@@ -20,3 +20,10 @@ inline size_t strlcpy(char* d, const char* s, size_t n) {
   return l;
 }
 #endif
+
+// Flash-string helpers: on the host every string is in RAM already.
+#define PSTR(s) (s)
+#define strcmp_P strcmp
+#define strncmp_P strncmp
+#define strncpy_P strncpy
+#define snprintf_P snprintf
