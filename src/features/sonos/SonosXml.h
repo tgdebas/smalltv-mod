@@ -13,11 +13,18 @@
 #include <Arduino.h>
 #include <Client.h>
 
+// strlcpy from a PSTR (the ESP8266 core has strncpy_P but no strlcpy_P).
+inline void xmlCopyP(char* dst, const char* srcP, size_t n) {
+  if (!n) return;
+  strncpy_P(dst, srcP, n - 1);
+  dst[n - 1] = 0;
+}
+
 // In-place: &lt; &gt; &quot; &apos; &amp; and numeric &#NN; / &#xNN; (UTF-8 out).
 void xmlUnescape(char* s);
 
-// Copies attribute `name` of a tag (the text between < and >) into out,
-// unescaped. Returns false if the attribute is absent.
+// Copies attribute `name` (a PSTR) of a tag (the text between < and >) into
+// out, unescaped. Returns false if the attribute is absent.
 bool xmlAttr(const char* tag, const char* name, char* out, size_t outLen);
 
 // Element name of a tag ("dc:title" from `dc:title id="x"`), without a leading

@@ -30,9 +30,7 @@ class SonosMode : public DisplayMode {
   uint8_t  shownKind_ = 0xFF;    // which screen is up: track / idle / status
   uint8_t  shownStage_ = 0xFF;
   uint8_t  artResult_ = 0;
-  char     shownTitle_[96] = "";
-  char     shownArtist_[64] = "";
-  char     shownArt_[320] = "";
+  uint32_t shownKey_ = 0;        // sonosTrackKey() of the track on screen
 };
 
 extern SonosMode g_sonosMode;

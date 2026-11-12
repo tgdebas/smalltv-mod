@@ -49,6 +49,7 @@ export default defineConfig({
             { label: 'Stock and crypto ticker', link: '/features/ticker/' },
             { label: 'Claude usage meter', link: '/features/usage/' },
             { label: 'Plane radar', link: '/features/radar/' },
+            { label: 'Sonos now playing', link: '/features/sonos/' },
             { label: 'WireGuard VPN', link: '/features/wireguard/' },
             { label: 'Notifications', link: '/features/notify/' },
             { label: 'Theme clocks', link: '/features/themes/' },

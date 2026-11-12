@@ -7,6 +7,7 @@
 // ---- state ------------------------------------------------------------------
 static SonosTrack g_track;
 static uint32_t   g_version = 0;
+static uint32_t   g_publishedKey = 0;   // fingerprint of what g_version last announced
 static bool       g_error = false;
 static SonosStage g_stage = SONOS_IDLE;
 static uint32_t   g_lastPlayingMs = 0;
@@ -18,7 +19,7 @@ static uint32_t g_nextPollMs = 0;
 static uint32_t g_nextTopoMs = 0;
 static uint8_t  g_failStreak = 0;
 
-static char    g_rooms[SONOS_MAX_ROOMS][SONOS_ROOM_NAME];
+static char    g_rooms[SONOS_MAX_ROOMS][SONOS_LIST_NAME];
 static uint8_t g_roomCount = 0;
 
 // SSDP discovery (non-blocking: send, then collect replies over later ticks).
@@ -64,6 +65,7 @@ static void closeSsdp() {
 void sonosInit(const Settings& s) {
   memset(&g_track, 0, sizeof(g_track));
   g_version++;
+  g_publishedKey = 0;
   g_error = false;
   g_stage = SONOS_IDLE;
   g_lastPlayingMs = 0;
@@ -86,8 +88,8 @@ struct Soap {
   HTTPClient http;
   int        code = 0;
 
-  bool call(const char* host, const char* path, const char* service,
-            const char* action, const char* args, uint16_t timeoutMs) {
+  bool call(const char* host, const __FlashStringHelper* path, const __FlashStringHelper* service,
+            const __FlashStringHelper* action, const __FlashStringHelper* args, uint16_t timeoutMs) {
     String url = F("http://");
     url += host;
     url += ':';
@@ -188,16 +190,16 @@ static void ssdpService() {
 // ---- topology: room -> coordinator --------------------------------------------
 static void addRoom(const char* name) {
   for (uint8_t i = 0; i < g_roomCount; i++)
-    if (!strcasecmp(g_rooms[i], name)) return;
+    if (!strncasecmp(g_rooms[i], name, SONOS_LIST_NAME - 1)) return;
   if (g_roomCount >= SONOS_MAX_ROOMS) return;
-  strlcpy(g_rooms[g_roomCount++], name, SONOS_ROOM_NAME);
+  strlcpy(g_rooms[g_roomCount++], name, SONOS_LIST_NAME);
 }
 
 static void readTopology(const Settings& s) {
   g_nextTopoMs = millis() + SONOS_TOPOLOGY_MS;
   Soap soap;
-  if (!soap.call(g_seed, "/ZoneGroupTopology/Control", "ZoneGroupTopology",
-                 "GetZoneGroupState", "", s.httpTimeout)) {
+  if (!soap.call(g_seed, F("/ZoneGroupTopology/Control"), F("ZoneGroupTopology"),
+                 F("GetZoneGroupState"), F(""), s.httpTimeout)) {
     noteFailure(soap.code);
     // A seed found by SSDP may be gone; search again next time round.
     if (s.sonos.host.length() == 0) g_seed[0] = 0;
@@ -222,8 +224,8 @@ static void readTopology(const Settings& s) {
 // ---- transport + track ----------------------------------------------------------
 static bool readTransport(const Settings& s, SonosPlay& out) {
   Soap soap;
-  if (!soap.call(g_coord, "/MediaRenderer/AVTransport/Control", "AVTransport",
-                 "GetTransportInfo", "<InstanceID>0</InstanceID>", s.httpTimeout)) {
+  if (!soap.call(g_coord, F("/MediaRenderer/AVTransport/Control"), F("AVTransport"),
+                 F("GetTransportInfo"), F("<InstanceID>0</InstanceID>"), s.httpTimeout)) {
     noteFailure(soap.code);
     return false;
   }
@@ -235,8 +237,8 @@ static bool readTransport(const Settings& s, SonosPlay& out) {
 static bool readPosition(const Settings& s, SonosTrack& t, bool& redirect) {
   redirect = false;
   Soap soap;
-  if (!soap.call(g_coord, "/MediaRenderer/AVTransport/Control", "AVTransport",
-                 "GetPositionInfo", "<InstanceID>0</InstanceID>", s.httpTimeout)) {
+  if (!soap.call(g_coord, F("/MediaRenderer/AVTransport/Control"), F("AVTransport"),
+                 F("GetPositionInfo"), F("<InstanceID>0</InstanceID>"), s.httpTimeout)) {
     noteFailure(soap.code);
     return false;
   }
@@ -264,10 +266,10 @@ void sonosService(const Settings& s, bool background) {
   SonosPlay state;
   if (!readTransport(s, state)) return;
 
-  // Static: ~480 bytes the ESP8266's 4 KB loop stack should not carry on top
-  // of the HTTP client and the scanner.
-  static SonosTrack t;
-  t = g_track;
+  // Parsed straight into g_track: a second ~480-byte copy is heap the
+  // ESP8266 cannot spare. A change is found by comparing fingerprints with
+  // what was last published, so a failed or redirected poll publishes nothing.
+  SonosTrack& t = g_track;
   t.state = state;
   bool redirect = false;
   if (!readPosition(s, t, redirect)) {
@@ -284,9 +286,19 @@ void sonosService(const Settings& s, bool background) {
   if (state == SONOS_PLAYING || state == SONOS_TRANSITIONING) g_lastPlayingMs = millis();
   if (state == SONOS_STOPPED && !t.title[0]) t.hasTrack = false;
 
-  bool changed = strcmp(t.title, g_track.title) || strcmp(t.artist, g_track.artist) ||
-                 strcmp(t.artUrl, g_track.artUrl) || t.state != g_track.state ||
-                 t.hasTrack != g_track.hasTrack;
-  g_track = t;
-  if (changed) g_version++;
+  uint32_t key = sonosTrackKey(t) ^ ((uint32_t)t.state << 24) ^ (t.hasTrack ? 0x5A5A5A5Au : 0);
+  if (key != g_publishedKey) {
+    g_publishedKey = key;
+    g_version++;
+  }
+}
+
+uint32_t sonosTrackKey(const SonosTrack& t) {
+  uint32_t h = 2166136261u;   // FNV-1a over title, artist and art URL
+  const char* parts[] = {t.title, t.artist, t.artUrl};
+  for (const char* p : parts) {
+    for (; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
+    h = (h ^ 0xFF) * 16777619u;   // field separator
+  }
+  return h;
 }
