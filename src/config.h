@@ -142,6 +142,7 @@
 #define MODE_NOTIFY    4             // transient overlay: armed over HTTP, never persisted
 #define MODE_THEME     6             // declarative installed clock faces
 #define MODE_HA        5             // Home Assistant screens pushed over MQTT
+#define MODE_SONOS     7             // Sonos now playing (album art + title), read from the speakers
 #define DEFAULT_MODE MODE_STOCKS
 #define DEFAULT_CAROUSEL_SEC 30      // per-mode dwell in carousel
 
@@ -268,6 +269,21 @@
 #ifndef WITH_HA
 #define WITH_HA 1
 #endif
+#ifndef WITH_SONOS
+#define WITH_SONOS 1
+#endif
+
+// Sonos now playing (MODE_SONOS, features/sonos). The device talks UPnP to the
+// speakers on the LAN (port 1400, plain HTTP): it follows the configured room
+// to its group coordinator, polls the current track, and streams the album art
+// through the speaker's /getaa proxy into a JPEG decoder.
+#define MAX_SONOS_ROOM_LEN     48
+#define MAX_SONOS_HOST_LEN     40
+#define DEFAULT_SONOS_POLL_SEC  3
+#define SONOS_PORT          1400
+#define SONOS_BG_POLL_SEC     10    // poll period while another carousel page shows
+#define SONOS_TOPOLOGY_MS   60000UL  // re-resolve the room's coordinator this often
+#define SONOS_ART_BOX         164    // album art fits in this square (px)
 
 // Claude usage mode: once data stops arriving for this long (PC asleep, daemon
 // stopped, network down) the screen switches from the stats to the idle mascot

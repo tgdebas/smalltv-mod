@@ -11,6 +11,10 @@
 #include "OtaUpdate.h"
 #include "StockClient.h"
 #include "UsageClient.h"
+#if WITH_SONOS
+#include "SonosClient.h"
+#include "SonosMode.h"
+#endif
 #if WITH_RADAR
 #include "RadarClient.h"
 #endif
@@ -135,6 +139,7 @@ static void handleGetConfig() {
   feat["radar"]  = (bool)WITH_RADAR;
   feat["ha"]     = (bool)WITH_HA;
   feat["theme"]  = (bool)WITH_THEME;
+  feat["sonos"]  = (bool)WITH_SONOS;
   // WireGuard is a per-chip decision rather than a per-feature one: it is
   // compiled only where the image has room for it (the ESP32-C2 build).
 #if defined(SMALLTV_WIREGUARD)
@@ -271,6 +276,24 @@ static void handleStatus() {
   if (radarLastOkMs())  { r.hasOk = true;    r.okAgo    = (millis() - radarLastOkMs()) / 1000; }
   r.url = radarLastUrl().c_str();
   smalltv::writeStatusRadar(out, r);
+#endif
+#if WITH_SONOS
+  {
+    smalltv::StatusSonos so;
+    const SonosTrack& t = sonosTrack();
+    so.stage = sonosStageName();
+    so.error = sonosError();
+    so.room = sonosRoomName();
+    so.coordinator = sonosCoordinator();
+    so.state = t.state == SONOS_PLAYING ? "playing" : t.state == SONOS_PAUSED ? "paused"
+             : t.state == SONOS_TRANSITIONING ? "transitioning" : "stopped";
+    so.title = t.title;
+    so.artist = t.artist;
+    so.art = g_sonosMode.artStatus();
+    so.roomCount = sonosRoomCount();
+    so.roomAt = sonosRoomAt;
+    smalltv::writeStatusSonos(out, so);
+  }
 #endif
   smalltv::writeStatusEnd(out);
   server.sendContent("", 0);   // the last chunk

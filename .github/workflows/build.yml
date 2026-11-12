@@ -145,6 +145,10 @@ jobs:
       - name: Test mode of a save
         run: sh tests/mode/run.sh
 
+      # Sonos SOAP/DIDL parsing against recorded-style speaker responses.
+      - name: Test Sonos response parsing
+        run: sh tests/sonos/run.sh
+
       # The mDNS library copy in lib/: a response is handled one record at a
       # time (peak: one record alive), and _parseResponse uses that loop.
       - name: Test mDNS answer handling
