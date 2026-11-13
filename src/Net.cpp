@@ -103,7 +103,7 @@ static void beginJoin(const WifiCred& n) {
   // the boot scan in netBegin() went in together (not tested apart). Setting
   // the defaults changes nothing for a device that already uses them.
   WiFi.setPhyMode(WIFI_PHY_MODE_11N);
-  WiFi.setOutputPower(20.5f);
+  WiFi.setOutputPower(WIFI_TX_DBM);
 #endif
   WiFi.begin(n.ssid.c_str(), n.pass.c_str());
 }
@@ -122,7 +122,7 @@ static void startAP(const Settings& s) {
   // stored PHY mode and TX power: its SmallTV-Setup network showed up, but
   // clients got no DHCP lease and pings and HTTP replies were lost.
   WiFi.setPhyMode(WIFI_PHY_MODE_11N);
-  WiFi.setOutputPower(20.5f);
+  WiFi.setOutputPower(WIFI_TX_DBM);
 #endif
   IPAddress apIP(192, 168, 4, 1);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
