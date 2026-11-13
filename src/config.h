@@ -281,6 +281,14 @@
 // speakers on the LAN (port 1400, plain HTTP): it follows the configured room
 // to its group coordinator, polls the current track, and streams the album art
 // through the speaker's /getaa proxy into a JPEG decoder.
+// ESP8266 Wi-Fi transmit power (dBm, 0..20.5) set before every join and
+// before the setup hotspot. 20.5 is the SDK maximum, which a SmallTV-ultra on
+// a FRITZ! mesh needed. A board whose supply sags on transmit bursts sends
+// garbled frames at full power; a build can lower it with -D WIFI_TX_DBM=15.
+#ifndef WIFI_TX_DBM
+#define WIFI_TX_DBM 20.5f
+#endif
+
 #define MAX_SONOS_ROOM_LEN     48
 #define MAX_SONOS_HOST_LEN     40
 #define DEFAULT_SONOS_POLL_SEC  3
