@@ -50,6 +50,19 @@
 #include "MqttClient.h"
 #endif
 
+#if defined(SMALLTV_FAMILY_ESP8266)
+// Full RF calibration at every power-up, instead of the core's default (byte
+// 114 of the PHY init data = 1: calibrate TX power only, take the rest from
+// the RF calibration sector in flash). An install over the stock OTA (the
+// SmallTV-ultra loader path) never erases that sector, and whatever the
+// stock firmware left there then stands in for calibration data: a
+// SmallTV-ultra so installed showed its hotspot but dropped most frames, so
+// clients got no DHCP lease and it could not get one from the router either,
+// with the right password. Costs about 200 ms at boot and some extra current
+// during it; does not depend on what is in flash.
+RF_PRE_INIT() { system_phy_set_powerup_option(3); }
+#endif
+
 // ---- mode registry --------------------------------------------------------
 // The compiled-in features, in display order. main.cpp holds no per-feature
 // state of its own — each mode owns its fetch/render/dirty tracking.
