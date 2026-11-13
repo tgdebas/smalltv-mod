@@ -116,6 +116,14 @@ static void startAP(const Settings& s) {
   // could restart a join right after netLoop ended it.
   WiFi.setAutoReconnect(false);
   WiFi.mode(s.wifiCount ? WIFI_AP_STA : WIFI_AP);
+#if !defined(SMALLTV_FAMILY_ESP32)
+  // The same RF reset beginJoin() does, for the setup hotspot too. Installed
+  // over the loader (no erase_flash), a SmallTV-ultra kept the stock firmware's
+  // stored PHY mode and TX power: its SmallTV-Setup network showed up, but
+  // clients got no DHCP lease and pings and HTTP replies were lost.
+  WiFi.setPhyMode(WIFI_PHY_MODE_11N);
+  WiFi.setOutputPower(20.5f);
+#endif
   IPAddress apIP(192, 168, 4, 1);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
   if (s.apPass.length() >= 8) {
