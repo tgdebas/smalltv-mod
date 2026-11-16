@@ -138,6 +138,14 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
    </div>
    <small class="hint">Each name here is the tab that configures it. Pick the active feature, then set it up in its own tab. Carousel rotates through the ticked features.</small>
   </div>
+  <div class="card"><h2>Screen refresh</h2>
+   <div class="row">
+    <div><label>Run for (minutes)</label><input id="pxMinutes" type="number" min="1" max="240" value="30"></div>
+   </div>
+   <button onclick="pixelRefresh(parseInt(gv('pxMinutes'))||30)">Start</button>
+   <button onclick="pixelRefresh(0)">Stop</button>
+   <small class="hint">A faint copy of an old layout (often the stock weather clock) is LCD image retention, not burn-in. Cycling the whole screen through white, black and the primary colours helps it fade. Start with 30 minutes and repeat if needed. The screen goes back to normal by itself when the time is up.</small>
+  </div>
   <div class="card" id="themeCard"><h2>Theme clocks</h2>
    <label>Installed theme</label><select id="themeSelect" onchange="themeChoiceChanged()"></select>
    <div style="margin-top:12px"><button class="btn" id="themeUseBtn" onclick="selectTheme()">Use theme</button>
@@ -337,7 +345,7 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
  <section id="sysmon" class="tab">
   <div class="card"><h2>Mac stats</h2>
    <div id="sysmonNow" class="muted">-</div>
-   <small class="hint">CPU, memory, disk and network of your Mac. The device cannot measure another computer, so a small script on the Mac sends the numbers every 5 seconds. With no numbers for 20 seconds (the Mac asleep, the script stopped) the screen says it is waiting, and the carousel skips the page.</small>
+   <small class="hint">CPU, memory, disk and network of your Mac. The device cannot measure another computer, so a small script on the Mac sends the numbers every 3 seconds. With no numbers for 20 seconds (the Mac asleep, the script stopped) the screen says it is waiting, and the carousel skips the page.</small>
   </div>
   <div class="card"><h2>Set up the Mac</h2>
    <small class="hint">Copy <code>tools/mac/smalltv-stats.sh</code> from this firmware's repository to the Mac, then run this once in Terminal. It starts the script now and at every login. It uses only tools that come with macOS.</small>
@@ -971,7 +979,7 @@ function sonosLine(o){
 }
 function sonosShow(o){var n=$('sonosNow');if(!n||!o)return;
  n.innerHTML=kv('Status',esc(o.stage))+kv('Room',esc(o.room||'-'))+kv('Speaker',esc(o.coordinator||'-'))+
-  kv('State',esc(o.state))+kv('Title',esc(o.title||'-'))+kv('Artist',esc(o.artist||'-'))+kv('Album art',esc(o.art||'-'));
+  kv('State',esc(o.state))+kv('Title',esc(o.title||'-'))+kv('Artist',esc(o.artist||'-'))+kv('Album art',esc(o.art||'-'))+(o.artDetail?kv('Art details',esc(o.artDetail)):'');
  var dl=$('sonosRooms'); if(dl)dl.innerHTML=(o.rooms||[]).map(function(r){return '<option value="'+esc(r)+'">'}).join('');
  var f=$('sonosFound'); if(f)f.textContent=(o.rooms&&o.rooms.length)?'Rooms found: '+o.rooms.join(', ')+'.':'';
 }
@@ -1001,6 +1009,7 @@ function wgLine(w){
 }
 function fmtUp(s){var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
  return (d?d+'d ':'')+(h?h+'h ':'')+m+'m'}
+function pixelRefresh(m){j('/api/pixelrefresh?minutes='+m,{method:'POST'}).then(function(d){toast(m?('Screen refresh running for '+Math.round(d.remaining/60)+' min'):'Screen refresh stopped')}).catch(function(e){toast(e.message)})}
 function refreshNow(){j('/api/refresh',{method:'POST'}).then(function(){toast('Refreshing...');setTimeout(loadStatus,1500)})}
 
 // HA screens purge: wipes the device store and the broker's retained copies.

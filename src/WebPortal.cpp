@@ -1,4 +1,5 @@
 #include "WebPortal.h"
+#include "PixelRefresh.h"
 #include "Platform.h"
 #include "WebGuard.h"
 #include "UpdateBuffer.h"
@@ -14,6 +15,7 @@
 #if WITH_SONOS
 #include "SonosClient.h"
 #include "SonosMode.h"
+#include "SonosArt.h"
 #endif
 #if WITH_SYSMON
 #include "SysmonData.h"
@@ -295,6 +297,7 @@ static void handleStatus() {
     so.title = t.title;
     so.artist = t.artist;
     so.art = g_sonosMode.artStatus();
+    so.artDetail = sonosArtDetail();
     so.roomCount = sonosRoomCount();
     so.roomAt = sonosRoomAt;
     smalltv::writeStatusSonos(out, so);
@@ -476,6 +479,18 @@ static void handleImport() {
   }
   server.send(200, "application/json", "{\"ok\":true,\"reboot\":true}");
   scheduleReboot(800);
+}
+
+// Screen refresh for LCD image retention: ?minutes=N (1..240) starts it,
+// 0 stops it. The screen cycles full colours, then the mode comes back.
+static void handlePixelRefresh() {
+  if (!requireAuth()) return;
+  long m = server.hasArg("minutes") ? server.arg("minutes").toInt() : 10;
+  if (m < 0) m = 0;
+  pixelRefreshStart((uint16_t)(m > PIXEL_REFRESH_MAX_MIN ? PIXEL_REFRESH_MAX_MIN : m));
+  char out[48];
+  snprintf(out, sizeof(out), "{\"ok\":true,\"remaining\":%lu}", (unsigned long)pixelRefreshRemainingSec());
+  server.send(200, "application/json", out);
 }
 
 static void handleRefresh() {
@@ -745,6 +760,7 @@ void webPortalBegin(Settings& settings) {
   server.on("/api/factory", HTTP_POST, handleFactory);
   server.on("/api/crash/clear", HTTP_POST, handleCrashClear);
   server.on("/api/refresh", HTTP_POST, handleRefresh);
+  server.on("/api/pixelrefresh", HTTP_POST, handlePixelRefresh);
   server.on("/api/export", HTTP_GET, handleExport);
   server.on("/api/import", HTTP_POST, handleImport);
   server.on("/api/checkupdate", HTTP_GET, handleCheckUpdate);

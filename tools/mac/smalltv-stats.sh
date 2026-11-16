@@ -4,7 +4,7 @@
 #
 #   bash smalltv-stats.sh install HOST   start now and at every login (LaunchAgent)
 #   bash smalltv-stats.sh uninstall      stop and remove the LaunchAgent
-#   bash smalltv-stats.sh run HOST       send every 5 s in this Terminal (Ctrl+C stops)
+#   bash smalltv-stats.sh run HOST       send every 3 s in this Terminal (Ctrl+C stops)
 #   bash smalltv-stats.sh print          show the numbers once, send nothing
 #
 # HOST is the device's address, e.g. smalltv-1a2b.local or 192.168.1.50.
@@ -17,7 +17,7 @@
 set -u
 
 LABEL="com.smalltv-mod.stats"
-INTERVAL=5                       # seconds between pushes (top's sample takes 1 of them)
+INTERVAL=3                       # seconds between pushes (top's sample takes 1 of them)
 SUPPORT_DIR="$HOME/Library/Application Support/smalltv-stats"
 AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/smalltv-stats.log"

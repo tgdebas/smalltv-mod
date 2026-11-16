@@ -29,5 +29,5 @@ bool     sysmonFresh(uint32_t nowMs);   // a push arrived within SYSMON_STALE_MS
 float    sysmonNetScale();
 
 #ifndef SYSMON_STALE_MS
-#define SYSMON_STALE_MS 20000UL    // the script pushes every 5 s; 4 missed = stale
+#define SYSMON_STALE_MS 20000UL    // the script pushes every 3 s; ~6 missed = stale
 #endif

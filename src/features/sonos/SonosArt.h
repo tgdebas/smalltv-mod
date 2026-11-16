@@ -23,3 +23,8 @@ enum ArtResult : uint8_t {
 // decoded image are left as they were, so fill the box first.
 ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutMs);
 const char* sonosArtResultName(ArtResult r);
+// One line on what the last draw saw (URL scheme, HTTP code, type, size,
+// image dimensions, heap), shown in the web UI to tell failures apart.
+const char* sonosArtDetail();
+
+#define SONOS_ART_URL_MAX 320
