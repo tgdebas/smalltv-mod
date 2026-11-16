@@ -298,6 +298,9 @@ static void handleStatus() {
     so.artist = t.artist;
     so.art = g_sonosMode.artStatus();
     so.artDetail = sonosArtDetail();
+    so.artSource = t.artSource == SONOS_ART_METADATA ? "metadata"
+                 : t.artSource == SONOS_ART_FROM_TRACK ? "from track" : "none";
+    so.trackUri = t.trackUri;
     so.roomCount = sonosRoomCount();
     so.roomAt = sonosRoomAt;
     smalltv::writeStatusSonos(out, so);

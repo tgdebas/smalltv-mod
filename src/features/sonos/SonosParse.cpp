@@ -41,7 +41,7 @@ enum PosField : uint8_t { PF_NONE, PF_URI, PF_TITLE, PF_CREATOR, PF_ALBUM, PF_AR
 
 bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool& redirect) {
   redirect = false;
-  char uri[64] = "", album[48] = "", stream[SONOS_TITLE_LEN] = "", art[SONOS_ART_LEN] = "";
+  char uri[200] = "", album[48] = "", stream[SONOS_TITLE_LEN] = "", art[SONOS_ART_LEN] = "";
   t.title[0] = t.artist[0] = t.artUrl[0] = 0;
 
   PosField f = PF_NONE;
@@ -115,6 +115,28 @@ bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool&
     }
   } else if (!strncmp_P(art, PSTR("http"), 4) && strlen(art) < sizeof(t.artUrl)) {
     strlcpy(t.artUrl, art, sizeof(t.artUrl));
+  }
+  t.artSource = t.artUrl[0] ? SONOS_ART_METADATA : SONOS_ART_NONE;
+  strlcpy(t.trackUri, uri, sizeof(t.trackUri));
+
+  // No cover in the track info (some AirPlay and Spotify Connect sessions):
+  // ask the speaker for the track's own art the way the Sonos apps do,
+  // /getaa?s=1&u=<TrackURI, percent-encoded>. TV and line-in have none.
+  if (!t.artUrl[0] && uri[0] && strncmp_P(uri, PSTR("x-sonos-htastream:"), 18) &&
+      strncmp_P(uri, PSTR("x-rincon-stream:"), 16)) {
+    int n = snprintf_P(t.artUrl, sizeof(t.artUrl), PSTR("http://%s:%d/getaa?s=1&u="), coordIp, 1400);
+    bool fits = n > 0 && (size_t)n < sizeof(t.artUrl);
+    static const char kHex[] = "0123456789abcdef";
+    for (const char* p = uri; fits && *p; p++) {
+      unsigned char c = (unsigned char)*p;
+      bool plain = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                   c == '-' || c == '_' || c == '.' || c == '~';
+      if ((size_t)n + (plain ? 1 : 3) >= sizeof(t.artUrl)) { fits = false; break; }
+      if (plain) { t.artUrl[n++] = (char)c; }
+      else { t.artUrl[n++] = '%'; t.artUrl[n++] = kHex[c >> 4]; t.artUrl[n++] = kHex[c & 15]; }
+    }
+    if (fits) { t.artUrl[n] = 0; t.artSource = SONOS_ART_FROM_TRACK; }
+    else t.artUrl[0] = 0;
   }
   t.hasTrack = t.title[0] || t.artUrl[0];
   return true;

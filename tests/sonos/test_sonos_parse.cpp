@@ -78,6 +78,7 @@ static void testSpotify() {
   CHECK_STR(t.artUrl,
             "http://192.168.1.20:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253a2SiXAy%3fsid%3d12%26flags%3d8224%26sn%3d7",
             "art via the coordinator's getaa proxy");
+  CHECK(t.artSource == SONOS_ART_METADATA, "art from the metadata");
   CHECK(t.hasTrack, "has track");
 }
 
@@ -91,6 +92,37 @@ static void testContentLengthStopsEarly() {
   bool redirect;
   sonosParsePosition(x, "10.0.0.2", t, redirect);
   CHECK_STR(t.title, "Rock & Roll Ain't Noise Pollution", "content-length bounded");
+}
+
+// AirPlay / Spotify Connect: no albumArtURI. The cover comes from the
+// speaker's /getaa for the TrackURI, percent-encoded like the Sonos apps do.
+static void testArtFromTrackUri() {
+  const char* r =
+      "<u:GetPositionInfoResponse><TrackMetaData>&lt;DIDL-Lite&gt;&lt;item&gt;"
+      "&lt;dc:title&gt;Song&lt;/dc:title&gt;&lt;dc:creator&gt;Band&lt;/dc:creator&gt;"
+      "&lt;/item&gt;&lt;/DIDL-Lite&gt;</TrackMetaData>"
+      "<TrackURI>x-sonos-spotify:spotify%3atrack%3a2SiXAy?sid=12&amp;flags=8224&amp;sn=7</TrackURI>"
+      "</u:GetPositionInfoResponse>";
+  FakeClient c(envelope(r));
+  XmlScanner x(c, -1, 5000);
+  SonosTrack t = {};
+  bool redirect;
+  CHECK(sonosParsePosition(x, "192.168.1.20", t, redirect), "parses");
+  CHECK_STR(t.artUrl,
+            "http://192.168.1.20:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253a2SiXAy%3fsid%3d12%26flags%3d8224%26sn%3d7",
+            "derived getaa, same form Sonos itself sends");
+  CHECK(t.artSource == SONOS_ART_FROM_TRACK, "marked as derived");
+  CHECK_STR(t.trackUri, "x-sonos-spotify:spotify%3atrack%3a2SiXAy?sid=12", "track uri kept (truncated) for diagnostics");
+
+  // TV input: no cover to derive.
+  const char* tv =
+      "<u:GetPositionInfoResponse><TrackMetaData></TrackMetaData>"
+      "<TrackURI>x-sonos-htastream:RINCON_X01400:spdif</TrackURI></u:GetPositionInfoResponse>";
+  FakeClient c2(envelope(tv));
+  XmlScanner x2(c2, -1, 5000);
+  SonosTrack t2 = {};
+  sonosParsePosition(x2, "1.2.3.4", t2, redirect);
+  CHECK(!t2.artUrl[0] && t2.artSource == SONOS_ART_NONE, "no derived art for TV");
 }
 
 static void testRadio() {
@@ -246,6 +278,7 @@ int main() {
   testSpotify();
   testContentLengthStopsEarly();
   testRadio();
+  testArtFromTrackUri();
   testGroupedMemberRedirects();
   testTvAndEmpty();
   testTransport();

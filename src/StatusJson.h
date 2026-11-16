@@ -88,6 +88,8 @@ struct StatusSonos {
   const char* artist = "";
   const char* art = "";           // outcome of the last cover draw
   const char* artDetail = "";     // what that draw saw (HTTP code, size, heap)
+  const char* artSource = "";     // metadata / from track / none
+  const char* trackUri = "";      // start of the TrackURI (diagnostics)
   uint8_t roomCount = 0;
   const char* (*roomAt)(uint8_t) = nullptr;
 };
@@ -216,6 +218,8 @@ template <class Out> void writeStatusSonos(Out& out, const StatusSonos& r) {
   member(out, PSTR(",\"artist\":"), r.artist);
   member(out, PSTR(",\"art\":"), r.art);
   member(out, PSTR(",\"artDetail\":"), r.artDetail);
+  member(out, PSTR(",\"artSource\":"), r.artSource);
+  member(out, PSTR(",\"trackUri\":"), r.trackUri);
   jsonout::raw(out, PSTR(",\"rooms\":["));
   for (uint8_t i = 0; i < r.roomCount && r.roomAt; i++) {
     if (i) jsonout::raw(out, PSTR(","));
