@@ -128,6 +128,12 @@ static void carouselNext(const Settings& s) {
     size_t cand = (g_carIdx + hop) % kModeCount;
     if (!carouselHas(s, kModes[cand])) continue;
     if (cand != g_carIdx) {
+#if WITH_THEME
+      // A theme off screen holds its whole package (manifest, fonts, layer
+      // state): give it back for the pages in between. Its values and fetch
+      // schedule stay, and it loads again when the carousel returns to it.
+      if (kModes[g_carIdx] == &g_themeMode) g_themeMode.release(UINT32_MAX, UINT32_MAX);
+#endif
       g_carIdx = cand;
       kModes[cand]->wake(s);
     }
