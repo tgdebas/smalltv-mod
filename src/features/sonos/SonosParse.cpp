@@ -16,6 +16,23 @@ bool sonosHostFromUrl(const char* url, char* out, size_t outLen) {
   return n > 0;
 }
 
+// Album art: relative URIs go through the speaker's /getaa proxy, which
+// fetches from the music service and serves it over plain HTTP. A URL that
+// does not fit is dropped, not cut: a truncated one only 404s.
+static void resolveArtUrl(const char* art, const char* coordIp, char* out, size_t n) {
+  out[0] = 0;
+  if (art[0] == '/') {
+    char host[64];
+    int hn = snprintf_P(host, sizeof(host), PSTR("http://%s:%d"), coordIp, 1400);
+    if (hn > 0 && (size_t)hn < sizeof(host) && hn + strlen(art) < n) {
+      memcpy(out, host, hn);
+      strlcpy(out + hn, art, n - hn);
+    }
+  } else if (!strncmp_P(art, PSTR("http"), 4) && strlen(art) < n) {
+    strlcpy(out, art, n);
+  }
+}
+
 SonosPlay sonosParseTransport(XmlScanner& x) {
   bool inState = false;
   char name[32];
@@ -103,21 +120,11 @@ bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool&
   }
   if (!t.artist[0] && album[0]) strlcpy(t.artist, album, sizeof(t.artist));
 
-  // Album art: relative URIs go through the speaker's /getaa proxy, which
-  // fetches from the music service and serves it over plain HTTP.
-  // A URL that does not fit is dropped, not cut: a truncated one only 404s.
-  if (art[0] == '/') {
-    char host[64];
-    int hn = snprintf_P(host, sizeof(host), PSTR("http://%s:%d"), coordIp, 1400);
-    if (hn > 0 && (size_t)hn < sizeof(host) && hn + strlen(art) < sizeof(t.artUrl)) {
-      memcpy(t.artUrl, host, hn);
-      strlcpy(t.artUrl + hn, art, sizeof(t.artUrl) - hn);
-    }
-  } else if (!strncmp_P(art, PSTR("http"), 4) && strlen(art) < sizeof(t.artUrl)) {
-    strlcpy(t.artUrl, art, sizeof(t.artUrl));
-  }
+  resolveArtUrl(art, coordIp, t.artUrl, sizeof(t.artUrl));
   t.artSource = t.artUrl[0] ? SONOS_ART_METADATA : SONOS_ART_NONE;
   strlcpy(t.trackUri, uri, sizeof(t.trackUri));
+  t.uriHash = 2166136261u;
+  for (const char* p = uri; *p; p++) t.uriHash = (t.uriHash ^ (uint8_t)*p) * 16777619u;
   // Radio: a stream added by URL (x-rincon-mp3radio, also aac: and
   // hls-radio:) carries no cover and /getaa has none for it (HTTP 404);
   // a station from a Sonos radio service (x-sonosapi-stream) usually has a
@@ -148,6 +155,31 @@ bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool&
   }
   t.hasTrack = t.title[0] || t.artUrl[0];
   return true;
+}
+
+bool sonosParseMediaInfo(XmlScanner& x, const char* coordIp, char* artOut, size_t artLen) {
+  char art[SONOS_ART_LEN] = "";
+  bool inArt = false;
+  char name[32];
+  XmlScanner::Kind k;
+  while ((k = x.next()) != XmlScanner::END) {
+    if (k == XmlScanner::TAG) {
+      const char* tag = x.value();
+      size_t tl = strlen(tag);
+      inArt = false;
+      if (tag[0] == '/' || (tl && tag[tl - 1] == '/')) continue;   // closing or empty
+      xmlTagName(tag, name, sizeof(name));
+      inArt = !strcmp_P(name, PSTR("upnp:albumArtURI"));
+      continue;
+    }
+    if (inArt && !art[0]) {
+      strlcpy(art, x.value(), sizeof(art));
+      xmlUnescape(art);
+    }
+    inArt = false;
+  }
+  resolveArtUrl(art, coordIp, artOut, artLen);
+  return artOut[0] != 0;
 }
 
 bool sonosParseTopology(XmlScanner& x, const char* want, SonosTopology& out,

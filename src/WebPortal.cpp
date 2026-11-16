@@ -299,7 +299,8 @@ static void handleStatus() {
     so.art = g_sonosMode.artStatus();
     so.artDetail = sonosArtDetail();
     so.artSource = t.artSource == SONOS_ART_METADATA ? "metadata"
-                 : t.artSource == SONOS_ART_FROM_TRACK ? "from track" : "none";
+                 : t.artSource == SONOS_ART_FROM_TRACK ? "from track"
+                 : t.artSource == SONOS_ART_STATION ? "station" : "none";
     so.trackUri = t.trackUri;
     so.roomCount = sonosRoomCount();
     so.roomAt = sonosRoomAt;

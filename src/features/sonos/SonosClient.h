@@ -31,6 +31,7 @@ enum : uint8_t {
   SONOS_ART_NONE = 0,       // the track info named no cover and none could be derived
   SONOS_ART_METADATA,       // upnp:albumArtURI from the track info
   SONOS_ART_FROM_TRACK,     // derived: the speaker's /getaa for the TrackURI
+  SONOS_ART_STATION,        // the radio station's logo, from GetMediaInfo
 };
 
 struct SonosTrack {
@@ -40,6 +41,7 @@ struct SonosTrack {
   uint8_t   artSource;               // SONOS_ART_* below: where artUrl came from
   char      trackUri[48];            // start of TrackURI, for diagnostics
   bool      radio;                   // a radio stream: no per-track cover to expect
+  uint32_t  uriHash;                 // FNV-1a of the whole TrackURI (station changes)
   SonosPlay state;
   bool      hasTrack;                // something is loaded (title or art known)
 };

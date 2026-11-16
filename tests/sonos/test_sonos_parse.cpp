@@ -141,6 +141,37 @@ static void testArtFromTrackUri() {
   CHECK_STR(t3.artist, "Queen", "artist from the stream");
 }
 
+// GetMediaInfo for a radio station: the logo sits in CurrentURIMetaData.
+static void testStationArt() {
+  const char* r =
+      "<u:GetMediaInfoResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">"
+      "<NrTracks>1</NrTracks><MediaDuration>NOT_IMPLEMENTED</MediaDuration>"
+      "<CurrentURI>x-rincon-mp3radio://https://stream.player.arrow.nl/arrow</CurrentURI>"
+      "<CurrentURIMetaData>&lt;DIDL-Lite xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot;&gt;"
+      "&lt;item id=&quot;-1&quot; parentID=&quot;-1&quot; restricted=&quot;true&quot;&gt;"
+      "&lt;dc:title&gt;Arrow Classic Rock&lt;/dc:title&gt;"
+      "&lt;upnp:class&gt;object.item.audioItem.audioBroadcast&lt;/upnp:class&gt;"
+      "&lt;upnp:albumArtURI&gt;https://cdn-profiles.tunein.com/s6712/images/logoq.jpg?t=1&amp;amp;x=2&lt;/upnp:albumArtURI&gt;"
+      "&lt;/item&gt;&lt;/DIDL-Lite&gt;</CurrentURIMetaData>"
+      "<NextURI></NextURI><PlayMedium>NETWORK</PlayMedium></u:GetMediaInfoResponse>";
+  FakeClient c(envelope(r), 4);
+  XmlScanner x(c, -1, 5000);
+  char art[SONOS_ART_LEN];
+  CHECK(sonosParseMediaInfo(x, "192.168.1.20", art, sizeof art), "station logo found");
+  CHECK_STR(art, "https://cdn-profiles.tunein.com/s6712/images/logoq.jpg?t=1&x=2", "logo URL, both entity levels");
+
+  const char* none = "<u:GetMediaInfoResponse><CurrentURIMetaData></CurrentURIMetaData></u:GetMediaInfoResponse>";
+  FakeClient c2(envelope(none));
+  XmlScanner x2(c2, -1, 5000);
+  CHECK(!sonosParseMediaInfo(x2, "1.2.3.4", art, sizeof art) && !art[0], "no logo: empty, false");
+
+  const char* rel = "<u:GetMediaInfoResponse><CurrentURIMetaData>&lt;upnp:albumArtURI&gt;/getaa?s=1&amp;amp;u=x&lt;/upnp:albumArtURI&gt;</CurrentURIMetaData></u:GetMediaInfoResponse>";
+  FakeClient c3(envelope(rel));
+  XmlScanner x3(c3, -1, 5000);
+  sonosParseMediaInfo(x3, "10.0.0.5", art, sizeof art);
+  CHECK_STR(art, "http://10.0.0.5:1400/getaa?s=1&u=x", "relative logo goes through the speaker");
+}
+
 static void testRadio() {
   const char* r =
       "<u:GetPositionInfoResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">"
@@ -295,6 +326,7 @@ int main() {
   testContentLengthStopsEarly();
   testRadio();
   testArtFromTrackUri();
+  testStationArt();
   testGroupedMemberRedirects();
   testTvAndEmpty();
   testTransport();
