@@ -5,6 +5,8 @@
 #include "SonosArt.h"
 #include "SonosClient.h"
 
+extern void appReleaseHeap(uint32_t needFree, uint32_t needLargestBlock);
+
 SonosMode g_sonosMode;
 
 // Layout (240x240): the cover in a square at the top, title and artist under
@@ -129,6 +131,10 @@ void SonosMode::renderFull(const Settings& s) {
   resetFont(g);
   renderBadge();
 
+  // The decoder needs ~10 KB in one piece (6 KB work area plus the socket).
+  // A theme loaded for the carousel can hold most of the heap; it steps
+  // aside while the cover streams in.
+  appReleaseHeap(16384, 10240);
   ArtResult r = sonosDrawArt(t.artUrl, ART_X, ART_Y, ART, s.httpTimeout);
   artResult_ = r;
   if (r != ART_OK) {
