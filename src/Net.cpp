@@ -18,6 +18,13 @@ static uint32_t    g_downSince = 0;      // 0 = connected; else millis() the dro
 // WiFi.begin(), and would otherwise overwrite the real cause.
 static volatile uint16_t g_lastReason = 0;
 static volatile bool     g_assoc = false;   // associated, maybe still waiting for DHCP
+// The last failed join reached the router (right SSID and password) but got
+// no DHCP lease. On a SmallTV-ultra installed over the loader this comes and
+// goes with the radio's state at boot: a retry without a restart keeps
+// failing, while a restart often joins. See the restart in netLoop().
+static bool        g_lastFailNoIp = false;
+static uint32_t    g_apSince = 0;           // millis() setup mode started
+static const uint32_t kNoIpRestartMs = 180000;   // setup mode this long after "no IP" -> restart
 static String      g_failText;
 static uint16_t    g_failSeq = 0;           // bumped on every new failure text
 
@@ -77,6 +84,7 @@ static const char* reasonText(uint16_t r) {
 
 // Call once an attempt has timed out, before WiFi.disconnect().
 static void recordFailure(const String& ssid) {
+  g_lastFailNoIp = g_assoc;
   char why[24];
   if (g_assoc)            strcpy_P(why, PSTR("no IP (DHCP)"));
   else if (g_lastReason)  strcpy_P(why, reasonText(g_lastReason));
@@ -132,6 +140,7 @@ static void startAP(const Settings& s) {
     WiFi.softAP(s.apSsid.c_str());           // open AP (WPA2 needs >=8 chars)
   }
   g_apSsid = s.apSsid;
+  g_apSince = millis();
   // Captive portal: answer every DNS query with our own IP.
   g_dns.setErrorReplyCode(DNSReplyCode::NoError);
   g_dns.start(53, "*", apIP);
@@ -252,6 +261,16 @@ void netLoop() {
     // then brings everything up in station mode.
     if (!g_retryAllowed || !g_cfg || !g_cfg->wifiCount) return;
     bool busy = WiFi.softAPgetStationNum() > 0;
+    // "no IP (DHCP)": the network and password are right, the radio is what
+    // failed, and a restart brings it up afresh. Never while someone is on
+    // the setup hotspot (they may be fixing the settings), never mid-attempt,
+    // and not for a wrong password or a missing network, which a restart
+    // cannot fix. Safe mode never gets here (g_retryAllowed is false).
+    if (g_lastFailNoIp && !busy && !g_attemptStart && millis() - g_apSince > kNoIpRestartMs) {
+      Serial.println(F("[net] no DHCP lease in setup mode, restarting to retry"));
+      delay(100);
+      ESP.restart();
+    }
     if (g_attemptStart) {
       if (WiFi.status() == WL_CONNECTED) {
         Serial.println(F("[net] setup-mode retry joined, rebooting"));

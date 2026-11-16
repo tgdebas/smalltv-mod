@@ -123,6 +123,22 @@ static void testArtFromTrackUri() {
   SonosTrack t2 = {};
   sonosParsePosition(x2, "1.2.3.4", t2, redirect);
   CHECK(!t2.artUrl[0] && t2.artSource == SONOS_ART_NONE, "no derived art for TV");
+
+  // A radio stream added by URL: no cover anywhere, so no request (the
+  // speaker answers 404), and the screen shows a radio instead of a note.
+  const char* mp3 =
+      "<u:GetPositionInfoResponse><TrackMetaData>&lt;DIDL-Lite&gt;&lt;item&gt;"
+      "&lt;r:streamContent&gt;Queen - Bicycle Race&lt;/r:streamContent&gt;"
+      "&lt;dc:title&gt;stream.player.arrow.nl&lt;/dc:title&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;</TrackMetaData>"
+      "<TrackURI>x-rincon-mp3radio://https://stream.player.arrow.nl/arrow</TrackURI></u:GetPositionInfoResponse>";
+  FakeClient c3(envelope(mp3));
+  XmlScanner x3(c3, -1, 5000);
+  SonosTrack t3 = {};
+  sonosParsePosition(x3, "1.2.3.4", t3, redirect);
+  CHECK(!t3.artUrl[0] && t3.artSource == SONOS_ART_NONE, "no /getaa for a direct stream");
+  CHECK(t3.radio, "marked as radio");
+  CHECK_STR(t3.title, "Bicycle Race", "song from the stream");
+  CHECK_STR(t3.artist, "Queen", "artist from the stream");
 }
 
 static void testRadio() {

@@ -118,11 +118,19 @@ bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool&
   }
   t.artSource = t.artUrl[0] ? SONOS_ART_METADATA : SONOS_ART_NONE;
   strlcpy(t.trackUri, uri, sizeof(t.trackUri));
+  // Radio: a stream added by URL (x-rincon-mp3radio, also aac: and
+  // hls-radio:) carries no cover and /getaa has none for it (HTTP 404);
+  // a station from a Sonos radio service (x-sonosapi-stream) usually has a
+  // logo there, so that one still gets the /getaa request below.
+  bool directStream = !strncmp_P(uri, PSTR("x-rincon-mp3radio:"), 18) ||
+                      !strncmp_P(uri, PSTR("aac:"), 4) || !strncmp_P(uri, PSTR("hls-radio:"), 10);
+  t.radio = directStream || !strncmp_P(uri, PSTR("x-sonosapi-stream:"), 18) ||
+            !strncmp_P(uri, PSTR("x-sonosapi-radio:"), 17);
 
   // No cover in the track info (some AirPlay and Spotify Connect sessions):
   // ask the speaker for the track's own art the way the Sonos apps do,
   // /getaa?s=1&u=<TrackURI, percent-encoded>. TV and line-in have none.
-  if (!t.artUrl[0] && uri[0] && strncmp_P(uri, PSTR("x-sonos-htastream:"), 18) &&
+  if (!t.artUrl[0] && uri[0] && !directStream && strncmp_P(uri, PSTR("x-sonos-htastream:"), 18) &&
       strncmp_P(uri, PSTR("x-rincon-stream:"), 16)) {
     int n = snprintf_P(t.artUrl, sizeof(t.artUrl), PSTR("http://%s:%d/getaa?s=1&u="), coordIp, 1400);
     bool fits = n > 0 && (size_t)n < sizeof(t.artUrl);
