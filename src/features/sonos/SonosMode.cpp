@@ -65,6 +65,19 @@ static void resetFont(Arduino_GFX* g) {
   g->setFont((const GFXfont*)nullptr);   // back to the built-in font for other modes
 }
 
+// A radio (body, speaker grille, dial, antenna), for streams without a cover.
+static void drawRadio(Arduino_GFX* g, int cx, int cy) {
+  uint16_t c = C_GRAY;
+  g->drawLine(cx - 18, cy - 24, cx + 14, cy - 40, c);          // antenna
+  g->drawLine(cx - 18, cy - 23, cx + 14, cy - 39, c);
+  g->fillRoundRect(cx - 40, cy - 24, 80, 50, 8, c);             // body
+  g->fillCircle(cx - 14, cy + 1, 15, C_ART_BG);                 // speaker
+  for (int r = 3; r <= 12; r += 4) g->drawCircle(cx - 14, cy + 1, r, c);
+  g->fillRoundRect(cx + 6, cy - 14, 26, 12, 3, C_ART_BG);       // tuning window
+  g->fillRect(cx + 17, cy - 13, 2, 10, c);
+  g->fillCircle(cx + 19, cy + 13, 6, C_ART_BG);                 // dial
+}
+
 // A simple eighth note, for covers that could not be drawn.
 static void drawNote(Arduino_GFX* g, int cx, int cy) {
   uint16_t c = C_GRAY;
@@ -139,7 +152,8 @@ void SonosMode::renderFull(const Settings& s) {
   artResult_ = r;
   if (r != ART_OK) {
     g->fillRect(ART_X, ART_Y, ART, ART, C_ART_BG);
-    drawNote(g, TFT_WIDTH / 2, ART_Y + ART / 2);
+    if (t.radio) drawRadio(g, TFT_WIDTH / 2, ART_Y + ART / 2 + 6);
+    else         drawNote(g, TFT_WIDTH / 2, ART_Y + ART / 2);
   }
 }
 

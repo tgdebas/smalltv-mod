@@ -39,6 +39,7 @@ struct SonosTrack {
   char      artUrl[SONOS_ART_LEN];   // absolute http(s) URL, empty = no art
   uint8_t   artSource;               // SONOS_ART_* below: where artUrl came from
   char      trackUri[48];            // start of TrackURI, for diagnostics
+  bool      radio;                   // a radio stream: no per-track cover to expect
   SonosPlay state;
   bool      hasTrack;                // something is loaded (title or art known)
 };
