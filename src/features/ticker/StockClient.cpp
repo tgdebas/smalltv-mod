@@ -2,16 +2,29 @@
 #include "Platform.h"
 #include <ArduinoJson.h>
 #include <math.h>
+#include <new>
 
-static StockData g_stocks[MAX_SYMBOLS];
-static uint8_t   g_count = 0;
+// Sized to the configured symbols rather than MAX_SYMBOLS: each entry is
+// ~340 bytes (the sparkline history), and on the ESP8266 a fixed array of
+// eight kept 2.7 KB of RAM even on a device that shows no ticker. Every
+// access is bounded by g_count.
+static StockData* g_stocks = nullptr;
+static uint8_t    g_cap = 0;
+static uint8_t    g_count = 0;
 
 static bool     g_refreshing = false;
 static uint8_t  g_fetchIdx = 0;
 
 // ---------------------------------------------------------------------------
 void stocksInit(const Settings& s) {
-  g_count = s.ticker.symbolCount;
+  uint8_t want = s.ticker.symbolCount;
+  if (want > MAX_SYMBOLS) want = MAX_SYMBOLS;
+  if (want != g_cap) {
+    delete[] g_stocks;
+    g_stocks = want ? new (std::nothrow) StockData[want] : nullptr;
+    g_cap = g_stocks ? want : 0;
+  }
+  g_count = g_cap;   // 0 when the allocation failed: the ticker says "No tickers"
   for (uint8_t i = 0; i < g_count; i++) {
     g_stocks[i].clear();
     strlcpy(g_stocks[i].symbol, s.ticker.symbols[i].symbol, MAX_SYMBOL_LEN);
