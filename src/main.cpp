@@ -333,6 +333,18 @@ void appRelease() {
   for (size_t i = 0; i < kModeCount; i++) kModes[i]->freeForRequest();
 }
 
+// Called by a mode that is about to make one large allocation (the Sonos
+// cover decoder): a loaded theme that is not on screen gives its package back
+// when the heap is short of it, keeping its values and schedule, and loads
+// again the next time the carousel shows it.
+void appReleaseHeap(uint32_t needFree, uint32_t needLargestBlock) {
+#if WITH_THEME
+  g_themeMode.release(needFree, needLargestBlock);
+#else
+  (void)needFree; (void)needLargestBlock;
+#endif
+}
+
 static void bootProgress(const char* msg) {
   gfxBoot("SmallTV", msg);
 }
