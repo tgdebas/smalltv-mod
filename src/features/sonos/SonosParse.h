@@ -16,6 +16,11 @@ SonosPlay sonosParseTransport(XmlScanner& x);
 // speaker is a group member whose transport points at its coordinator.
 bool sonosParsePosition(XmlScanner& x, const char* coordIp, SonosTrack& t, bool& redirect);
 
+// GetMediaInfo -> the logo in CurrentURIMetaData, which is where a radio
+// station's art lives (the per-track metadata of a stream has none). Writes
+// an absolute URL to artOut; false when the station has no logo.
+bool sonosParseMediaInfo(XmlScanner& x, const char* coordIp, char* artOut, size_t artLen);
+
 // GetZoneGroupState -> the coordinator IP of the group holding `room`
 // (case-insensitive). An empty `room` picks the first group. Every visible
 // room name is passed to onRoom (may be null).

@@ -8,6 +8,10 @@
 static SonosTrack g_track;
 static uint32_t   g_version = 0;
 static uint32_t   g_publishedKey = 0;   // fingerprint of what g_version last announced
+// Radio: the station logo from GetMediaInfo, read once per station (keyed by
+// the TrackURI hash), not on every poll.
+static char       g_stationArt[SONOS_ART_LEN] = "";
+static uint32_t   g_stationUri = 0;
 static bool       g_error = false;
 static SonosStage g_stage = SONOS_IDLE;
 static uint32_t   g_lastPlayingMs = 0;
@@ -66,6 +70,8 @@ void sonosInit(const Settings& s) {
   memset(&g_track, 0, sizeof(g_track));
   g_version++;
   g_publishedKey = 0;
+  g_stationArt[0] = 0;
+  g_stationUri = 0;
   g_error = false;
   g_stage = SONOS_IDLE;
   g_lastPlayingMs = 0;
@@ -246,6 +252,16 @@ static bool readPosition(const Settings& s, SonosTrack& t, bool& redirect) {
   return sonosParsePosition(x, g_coord, t, redirect);
 }
 
+static bool readStationArt(const Settings& s) {
+  Soap soap;
+  if (!soap.call(g_coord, F("/MediaRenderer/AVTransport/Control"), F("AVTransport"),
+                 F("GetMediaInfo"), F("<InstanceID>0</InstanceID>"), s.httpTimeout))
+    return false;   // not a poll failure: the track itself was read fine
+  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 3000);
+  sonosParseMediaInfo(x, g_coord, g_stationArt, sizeof(g_stationArt));
+  return true;
+}
+
 // ---------------------------------------------------------------------------------
 void sonosService(const Settings& s, bool background) {
   if (WiFi.status() != WL_CONNECTED) return;
@@ -278,6 +294,20 @@ void sonosService(const Settings& s, bool background) {
       g_nextTopoMs = millis();
     }
     return;
+  }
+
+  // Radio has no per-track cover; the station's logo is in the media info,
+  // the same place the Sonos app takes it from.
+  if (t.radio && !t.artUrl[0]) {
+    if (t.uriHash != g_stationUri) {
+      g_stationArt[0] = 0;
+      if (readStationArt(s)) g_stationUri = t.uriHash;   // retried next poll if it failed
+    }
+    if (g_stationArt[0]) {
+      strlcpy(t.artUrl, g_stationArt, sizeof(t.artUrl));
+      t.artSource = SONOS_ART_STATION;
+      t.hasTrack = true;
+    }
   }
 
   g_error = false;
