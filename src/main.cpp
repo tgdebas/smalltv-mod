@@ -20,6 +20,7 @@
 #include "Clock.h"
 #include "SunTimes.h"
 #include "WgClient.h"
+#include "PixelRefresh.h"
 #if WITH_THEME
 #include "features/theme/ThemeMode.h"
 #endif
@@ -516,8 +517,22 @@ void loop() {
     if (g_carSwitch) g_carSwitch += g_notifyMode.heldMs();
   }
 #else
-  const bool restore = false;
+  bool restore = false;
 #endif
+
+  // Screen refresh (image retention): owns the screen until it ends, then
+  // the active mode repaints over it.
+  static bool wasRefreshing = false;
+  if (pixelRefreshActive()) {
+    wasRefreshing = true;
+    pixelRefreshService();
+    delay(5);
+    return;
+  }
+  if (wasRefreshing) {
+    wasRefreshing = false;
+    restore = true;
+  }
 
   DisplayMode* m = activeMode(g_settings);
 #if WITH_SONOS

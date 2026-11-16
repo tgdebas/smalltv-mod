@@ -6,9 +6,11 @@
 #include <new>
 #include "tjpgd.h"
 
-// TJpgDec's documented minimum for JD_FASTDECODE 1 is 3500 bytes; the margin
-// covers JPEGs with four Huffman tables and 2x2 chroma subsampling.
-#define ART_POOL_BYTES 4096
+// TJpgDec's documented minimum for JD_FASTDECODE 1 is 3500 bytes, but the
+// tables it builds grow with the image (four quantisation tables alone take
+// 1 KB), so ask for more when the heap has it and fall back to the minimum.
+#define ART_POOL_BYTES     4096
+#define ART_POOL_PREFERRED 6144
 
 namespace {
 struct ArtSession {
@@ -90,18 +92,50 @@ const char* sonosArtResultName(ArtResult r) {
   }
 }
 
-ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutMs) {
-  if (!url || !url[0]) return ART_NO_URL;
+// What the last attempt saw, for the Sonos tab: which URL form, the HTTP
+// answer, the image and the heap. One line, overwritten on every draw.
+static char g_detail[120] = "";
+const char* sonosArtDetail() { return g_detail; }
+
+// Copies `url` into out, rewritten for this chip:
+//  - https becomes http. Album-art CDNs (Spotify's i.scdn.co, Apple's
+//    mzstatic) serve the same files over plain HTTP, and a TLS handshake needs
+//    ~20 KB of contiguous heap the ESP8266 rarely has.
+//  - The largest cover size becomes a ~300 px one where the URL names a size,
+//    so there is less to download and decode for a 164 px box.
+static void artFetchUrl(const char* url, char* out, size_t n) {
+  if (!strncmp(url, "https://", 8)) snprintf(out, n, "http://%s", url + 8);
+  else strlcpy(out, url, n);
+  // Spotify: ab67616d0000b273<id> is 640 px, ab67616d00001e02<id> is 300 px.
+  char* p = strstr(out, "ab67616d0000b273");
+  if (p) memcpy(p + 8, "00001e02", 8);
+  // Apple: .../600x600bb.jpg (any WxH) -> 300x300bb.jpg.
+  char* bb = strstr(out, "bb.jpg");
+  if (bb) {
+    char* slash = bb;
+    while (slash > out && *slash != '/') slash--;
+    if (*slash == '/' && strchr(slash, 'x') && strchr(slash, 'x') < bb) {
+      char tailBuf[64];
+      strlcpy(tailBuf, bb, sizeof(tailBuf));
+      size_t room = n - (size_t)(slash + 1 - out);
+      snprintf(slash + 1, room, "300x300%s", tailBuf);
+    }
+  }
+}
+
+static ArtResult fetchAndDraw(const char* url, int x, int y, int box, uint16_t timeoutMs) {
   bool https = !strncmp(url, "https://", 8);
+  uint32_t t0 = millis();
+  uint32_t blk = platformMaxFreeBlock();
+  int n = snprintf(g_detail, sizeof(g_detail), "%s, heap blk %lu", https ? "https" : "http",
+                   (unsigned long)blk);
 
   std::unique_ptr<NetClient> client;
   if (https) {
-    // Art from the speaker's /getaa proxy is plain HTTP; only some radio
-    // stations hand out https logos. Same TLS heap floor as the other fetches.
-    if (platformMaxFreeBlock() < 16000 + ART_POOL_BYTES) return ART_LOW_HEAP;
+    if (blk < 16000 + ART_POOL_BYTES) return ART_LOW_HEAP;
     client.reset(platformMakeSecureClient(4096));
   } else {
-    if (platformMaxFreeBlock() < ART_POOL_BYTES + 4096) return ART_LOW_HEAP;
+    if (blk < ART_POOL_BYTES + 4096) return ART_LOW_HEAP;
     client.reset(new WiFiClient());
   }
 
@@ -110,27 +144,38 @@ ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutM
   http.setReuse(false);
   http.setTimeout(timeoutMs);
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  const char* hdrs[] = {"Content-Type"};
+  http.collectHeaders(hdrs, 1);
   if (!http.begin(*client, url)) return ART_CONNECT_FAIL;
   int code = http.GET();
+  n += snprintf(g_detail + n, sizeof(g_detail) - n, ", HTTP %d", code);
   if (code != HTTP_CODE_OK) {
     http.end();
     return code < 0 ? ART_CONNECT_FAIL : ART_HTTP_ERROR;
   }
+  String type = http.header("Content-Type");
+  n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %.20s, %d B", type.c_str(), http.getSize());
 
-  std::unique_ptr<uint8_t[]> pool(new (std::nothrow) uint8_t[ART_POOL_BYTES]);
+  size_t poolSize = ART_POOL_PREFERRED;
+  std::unique_ptr<uint8_t[]> pool(new (std::nothrow) uint8_t[poolSize]);
+  if (!pool) {
+    poolSize = ART_POOL_BYTES;
+    pool.reset(new (std::nothrow) uint8_t[poolSize]);
+  }
   if (!pool) { http.end(); return ART_LOW_HEAP; }
 
   ArtSession s;
   s.in = &http.getStream();
   s.left = http.getSize();
-  s.deadline = millis() + (uint32_t)timeoutMs * 2;   // a cover is ~50-150 KB
+  s.deadline = millis() + (uint32_t)timeoutMs * 2;   // a cover is ~30-150 KB
   s.clipX = x; s.clipY = y; s.clipW = box; s.clipH = box;
 
   JDEC jd;
   jd.swap = 0;
-  JRESULT jr = jd_prepare(&jd, artInput, pool.get(), ART_POOL_BYTES, &s);
+  JRESULT jr = jd_prepare(&jd, artInput, pool.get(), poolSize, &s);
   if (jr != JDR_OK) {
     http.end();
+    snprintf(g_detail + n, sizeof(g_detail) - n, ", jpeg prepare %d", (int)jr);
     return (jr == JDR_FMT3 || jr == JDR_FMT1 || jr == JDR_MEM1) ? ART_UNSUPPORTED : ART_DECODE_ERROR;
   }
 
@@ -140,8 +185,31 @@ ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutM
   int ow = jd.width >> scale, oh = jd.height >> scale;
   s.x0 = x + (box - ow) / 2;
   s.y0 = y + (box - oh) / 2;
+  n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %ux%u 1/%u", jd.width, jd.height, 1u << scale);
 
   jr = jd_decomp(&jd, artOutput, scale);
   http.end();
+  snprintf(g_detail + n, sizeof(g_detail) - n, ", %s %lu ms", jr == JDR_OK ? "drawn" : "decode err",
+           (unsigned long)(millis() - t0));
   return jr == JDR_OK ? ART_OK : ART_DECODE_ERROR;
+}
+
+ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutMs) {
+  if (!url || !url[0]) { g_detail[0] = 0; return ART_NO_URL; }
+  // The rewritten form first (plain HTTP, smaller image); the original only
+  // when it differs and the first could not even be fetched.
+  char alt[SONOS_ART_URL_MAX];
+  artFetchUrl(url, alt, sizeof(alt));
+  ArtResult r = fetchAndDraw(alt, x, y, box, timeoutMs);
+  if ((r == ART_CONNECT_FAIL || r == ART_HTTP_ERROR) && strcmp(alt, url)) {
+    char first[sizeof(g_detail)];
+    strlcpy(first, g_detail, sizeof(first));
+    r = fetchAndDraw(url, x, y, box, timeoutMs);
+    if (r != ART_OK) {   // keep both stories
+      char both[sizeof(g_detail)];
+      snprintf(both, sizeof(both), "%.55s | %.60s", first, g_detail);
+      strlcpy(g_detail, both, sizeof(g_detail));
+    }
+  }
+  return r;
 }

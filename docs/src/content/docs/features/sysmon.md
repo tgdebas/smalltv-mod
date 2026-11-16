@@ -5,7 +5,7 @@ description: Your Mac's CPU, memory, disk and network use, sent by a small scrip
 
 Switch **Display → Mode** to **Mac stats**, or tick it in the carousel list. The screen shows four numbers from your Mac: CPU and memory as rings across the top, disk use and network speed as large numbers with a bar underneath. The look follows the "system monitor" dashboard of [geekmagic-hacs](https://github.com/adrienbrault/geekmagic-hacs).
 
-The SmallTV cannot measure another computer, so a small script on the Mac does that. Every 5 seconds it reads the numbers with tools that come with macOS (`top`, `vm_stat`, `df`, `netstat`) and sends them to the device over your network. Nothing else is installed, and the numbers go only to the SmallTV.
+The SmallTV cannot measure another computer, so a small script on the Mac does that. Every 3 seconds it reads the numbers with tools that come with macOS (`top`, `vm_stat`, `df`, `netstat`) and sends them to the device over your network. Nothing else is installed, and the numbers go only to the SmallTV.
 
 ## Set up the Mac
 

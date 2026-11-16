@@ -39,7 +39,7 @@ bool sysmonApply(const char* cpu, const char* mem, const char* disk,
   if (!any) return false;
 
   float total = g_s.rxMbps + g_s.txMbps;
-  g_peak *= 0.97f;                  // ~halves in 2 minutes of 5 s pushes
+  g_peak *= 0.98f;                  // ~halves in 2 minutes of 3 s pushes
   if (total > g_peak) g_peak = total;
   if (g_peak < 10.0f) g_peak = 10.0f;
 
