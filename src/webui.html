@@ -979,7 +979,7 @@ function sonosLine(o){
 }
 function sonosShow(o){var n=$('sonosNow');if(!n||!o)return;
  n.innerHTML=kv('Status',esc(o.stage))+kv('Room',esc(o.room||'-'))+kv('Speaker',esc(o.coordinator||'-'))+
-  kv('State',esc(o.state))+kv('Title',esc(o.title||'-'))+kv('Artist',esc(o.artist||'-'))+kv('Album art',esc(o.art||'-'))+(o.artDetail?kv('Art details',esc(o.artDetail)):'');
+  kv('State',esc(o.state))+kv('Title',esc(o.title||'-'))+kv('Artist',esc(o.artist||'-'))+kv('Album art',esc(o.art||'-'))+kv('Art source',esc(o.artSource||'-'))+kv('Art details',esc(o.artDetail||(o.art==='no art'?'the speaker gave no cover for this track':'none yet: shows after the next track change')))+kv('Track',esc(o.trackUri||'-'));
  var dl=$('sonosRooms'); if(dl)dl.innerHTML=(o.rooms||[]).map(function(r){return '<option value="'+esc(r)+'">'}).join('');
  var f=$('sonosFound'); if(f)f.textContent=(o.rooms&&o.rooms.length)?'Rooms found: '+o.rooms.join(', ')+'.':'';
 }

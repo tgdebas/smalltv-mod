@@ -27,10 +27,18 @@ enum SonosPlay : uint8_t {
   SONOS_TRANSITIONING,
 };
 
+enum : uint8_t {
+  SONOS_ART_NONE = 0,       // the track info named no cover and none could be derived
+  SONOS_ART_METADATA,       // upnp:albumArtURI from the track info
+  SONOS_ART_FROM_TRACK,     // derived: the speaker's /getaa for the TrackURI
+};
+
 struct SonosTrack {
   char      title[SONOS_TITLE_LEN];
   char      artist[SONOS_ARTIST_LEN];
   char      artUrl[SONOS_ART_LEN];   // absolute http(s) URL, empty = no art
+  uint8_t   artSource;               // SONOS_ART_* below: where artUrl came from
+  char      trackUri[48];            // start of TrackURI, for diagnostics
   SonosPlay state;
   bool      hasTrack;                // something is loaded (title or art known)
 };
