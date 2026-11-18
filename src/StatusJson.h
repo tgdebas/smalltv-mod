@@ -90,6 +90,9 @@ struct StatusSonos {
   const char* artDetail = "";     // what that draw saw (HTTP code, size, heap)
   const char* artSource = "";     // metadata / from track / none
   const char* trackUri = "";      // start of the TrackURI (diagnostics)
+  const char* artVia = "";        // saved logo / speaker/web / from Mac / none
+  bool radio = false;             // a radio stream is playing
+  bool hasLogo = false;           // a logo is saved for that station
   uint8_t roomCount = 0;
   const char* (*roomAt)(uint8_t) = nullptr;
 };
@@ -220,6 +223,9 @@ template <class Out> void writeStatusSonos(Out& out, const StatusSonos& r) {
   member(out, PSTR(",\"artDetail\":"), r.artDetail);
   member(out, PSTR(",\"artSource\":"), r.artSource);
   member(out, PSTR(",\"trackUri\":"), r.trackUri);
+  member(out, PSTR(",\"artVia\":"), r.artVia);
+  member(out, PSTR(",\"radio\":"), r.radio);
+  member(out, PSTR(",\"hasLogo\":"), r.hasLogo);
   jsonout::raw(out, PSTR(",\"rooms\":["));
   for (uint8_t i = 0; i < r.roomCount && r.roomAt; i++) {
     if (i) jsonout::raw(out, PSTR(","));

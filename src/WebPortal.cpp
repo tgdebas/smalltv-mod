@@ -16,6 +16,7 @@
 #include "SonosClient.h"
 #include "SonosMode.h"
 #include "SonosArt.h"
+#include "SonosArtStore.h"
 #endif
 #if WITH_SYSMON
 #include "SysmonData.h"
@@ -302,6 +303,11 @@ static void handleStatus() {
                  : t.artSource == SONOS_ART_FROM_TRACK ? "from track"
                  : t.artSource == SONOS_ART_STATION ? "station" : "none";
     so.trackUri = t.trackUri;
+    so.artVia = g_sonosMode.artVia();
+    so.radio = t.radio;
+    char path[32];
+    artStationPath(t.uriHash, path, sizeof(path));
+    so.hasLogo = t.radio && artStoreHas(path);
     so.roomCount = sonosRoomCount();
     so.roomAt = sonosRoomAt;
     smalltv::writeStatusSonos(out, so);
@@ -586,9 +592,100 @@ static void handleSysmonPush() {
 #else
   bool ok = false;
 #endif
-  server.send(ok ? 200 : 400, "application/json",
-              ok ? "{\"ok\":true}" : "{\"ok\":false}");
+  if (!ok) { server.send(400, "application/json", "{\"ok\":false}"); return; }
+#if WITH_SONOS
+  // The reply also names a cover the cube could not fetch itself (https,
+  // PNG, short heap), so the same script relays it: see /api/sonos/art.
+  const char* artUrl;
+  uint32_t artKey;
+  if (g_sonosMode.artWanted(&artUrl, &artKey)) {
+    JsonDocument doc;
+    doc["ok"] = true;
+    doc["art"] = artUrl;
+    char key[9];
+    snprintf(key, sizeof(key), "%08lx", (unsigned long)artKey);
+    doc["key"] = key;
+    sendJson(doc);
+    return;
+  }
+#endif
+  server.send(200, "application/json", "{\"ok\":true}");
 }
+
+#if WITH_SONOS
+// ---- covers kept in flash (SonosArtStore) ----------------------------------
+// POST /api/sonos/art?key=<8 hex>, multipart JPEG: a cover the Mac relayed.
+// Outside the password like /api/sysmon (the same script sends it), and all
+// it can change is the picture on the screen. POST /api/sonos/logo, multipart
+// JPEG: the Sonos tab saves a logo for the radio station playing; with
+// ?remove=1 and no file it deletes that logo. Behind the password.
+static bool g_artUpStarted = false, g_artUpOk = false;
+
+static bool parseKey(const String& hex, uint32_t& out) {
+  if (hex.length() != 8) return false;
+  char* end = nullptr;
+  out = strtoul(hex.c_str(), &end, 16);
+  return end && *end == 0 && out != 0;
+}
+
+static void artUploadStep(bool relay) {
+  HTTPUpload& up = server.upload();
+  if (up.status == UPLOAD_FILE_START) {
+    g_artUpStarted = g_artUpOk = false;
+    if (!guardAllowed()) return;
+    if (!relay && S->auth.pass.length() &&
+        !server.authenticate(S->auth.user.c_str(), S->auth.pass.c_str())) return;
+    char path[32];
+    if (relay) {
+      uint32_t key;
+      if (!parseKey(server.arg("key"), key)) return;
+      artRelayPath(key, path, sizeof(path));
+    } else {
+      const SonosTrack& t = sonosTrack();
+      if (!t.radio || !t.uriHash) return;   // logos are per radio station
+      artStationPath(t.uriHash, path, sizeof(path));
+    }
+    g_artUpStarted = artUploadBegin(path, relay);
+  } else if (!g_artUpStarted) {
+    return;
+  } else if (up.status == UPLOAD_FILE_WRITE) {
+    artUploadWrite(up.buf, up.currentSize);
+  } else if (up.status == UPLOAD_FILE_END) {
+    g_artUpOk = artUploadEnd();
+    g_artUpStarted = false;
+  } else if (up.status == UPLOAD_FILE_ABORTED) {
+    artUploadAbort();
+    g_artUpStarted = false;
+  }
+  yield();
+}
+
+static void handleArtRelayUpload() { artUploadStep(true); }
+static void handleLogoUpload()     { artUploadStep(false); }
+
+static void handleArtRelayDone() {
+  if (!guardRequest()) return;
+  bool ok = g_artUpOk;
+  g_artUpOk = false;
+  server.send(ok ? 200 : 400, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
+}
+
+static void handleLogoDone() {
+  if (!requireAuth()) return;
+  bool ok;
+  if (server.hasArg("remove")) {
+    const SonosTrack& t = sonosTrack();
+    char path[32];
+    artStationPath(t.uriHash, path, sizeof(path));
+    ok = t.radio && artStoreRemove(path);
+  } else {
+    ok = g_artUpOk;
+  }
+  g_artUpOk = false;
+  if (ok) g_sonosMode.wake(*S);   // redraw with (or without) the logo
+  server.send(ok ? 200 : 400, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
+}
+#endif
 
 // Prompt activity from Claude Code hooks: /api/activity?state=running|done|idle.
 // A query argument rather than JSON so a hook is a single curl with no quoting.
@@ -772,6 +869,10 @@ void webPortalBegin(Settings& settings) {
   server.on("/api/usage", HTTP_POST, handleUsagePush);   // daemon pushes usage here
   server.on("/api/activity", HTTP_POST, handleActivity); // Claude Code hooks
   server.on("/api/sysmon", HTTP_POST, handleSysmonPush); // Mac stats script
+#if WITH_SONOS
+  server.on("/api/sonos/art", HTTP_POST, handleArtRelayDone, handleArtRelayUpload);
+  server.on("/api/sonos/logo", HTTP_POST, handleLogoDone, handleLogoUpload);
+#endif
 #if WITH_HA
   server.on("/api/ha/clear", HTTP_POST, handleHaClear);  // purge HA screens (device + broker retained)
 #endif

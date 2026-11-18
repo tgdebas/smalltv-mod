@@ -12,7 +12,13 @@
 # netstat and curl. Nothing is installed besides the LaunchAgent.
 #
 # What is sent: POST http://HOST/api/sysmon with cpu, mem, disk (percent) and
-# rx, tx (Mbit/s on the default network interface). Nothing else leaves the Mac.
+# rx, tx (Mbit/s on the default network interface).
+#
+# Covers: when the SmallTV shows Sonos Now Playing but cannot fetch the cover
+# itself (an https-only image, a PNG, or not enough memory), its reply names
+# the image. The script then downloads it, shrinks it to 160 px and converts it
+# to JPEG with sips (built into macOS), and sends it to http://HOST/api/sonos/art.
+# Each cover is fetched once. Set SMALLTV_STATS_COVERS=0 to turn this off.
 
 set -u
 
@@ -96,13 +102,33 @@ rate_mbps() {   # OLD NEW SECONDS
 }
 
 # ---- sending -------------------------------------------------------------------------------
+# Prints the device's reply, which may name a cover it wants (see below).
 send() {   # HOST CPU MEM DISK RX TX
-  curl -fsS -m 4 -o /dev/null \
+  curl -fsS -m 4 \
     --data "cpu=$2&mem=$3&disk=$4&rx=$5&tx=$6" "http://$1/api/sysmon"
+}
+
+# The reply when the SmallTV wants a cover: {"ok":true,"art":"<url>","key":"<8 hex>"}
+reply_art() { sed -n 's/.*"art"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's|\\/|/|g'; }
+reply_key() { sed -n 's/.*"key"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{8\}\)".*/\1/p'; }
+
+# Download a cover, make it a small baseline JPEG, send it to the device.
+relay_cover() {   # HOST URL KEY
+  local tmp rc=1
+  tmp=$(mktemp -d) || return 1
+  if curl -fsSL -m 15 -o "$tmp/in" "$2" &&
+     sips -s format jpeg -s formatOptions 85 -Z 160 "$tmp/in" --out "$tmp/out.jpg" >/dev/null 2>&1 &&
+     curl -fsS -m 10 -o /dev/null -F "file=@$tmp/out.jpg;type=image/jpeg" \
+       "http://$1/api/sonos/art?key=$3"; then
+    rc=0
+  fi
+  rm -rf "$tmp"
+  return $rc
 }
 
 run_loop() {
   local host=$1 prev_in="" prev_out="" prev_t="" warned=0
+  local cover_done="" cover_failed="" cover_failed_at=0 covers=${SMALLTV_STATS_COVERS:-1}
   echo "Sending this Mac's stats to $host every ${INTERVAL}s (Ctrl+C stops)."
   while :; do
     local cpu mem disk rx=0 tx=0 bytes now
@@ -118,8 +144,21 @@ run_loop() {
       fi
       prev_in=$1 prev_out=$2 prev_t=$now
     fi
-    if send "$host" "$cpu" "$mem" "$disk" "$rx" "$tx" 2>/dev/null; then
+    local reply
+    if reply=$(send "$host" "$cpu" "$mem" "$disk" "$rx" "$tx" 2>/dev/null); then
       warned=0
+      local key url
+      key=$(printf '%s' "$reply" | reply_key)
+      if [ "$covers" = 1 ] && [ -n "$key" ] && [ "$key" != "$cover_done" ] &&
+         { [ "$key" != "$cover_failed" ] || [ $((now - cover_failed_at)) -ge 60 ]; }; then
+        url=$(printf '%s' "$reply" | reply_art)
+        if [ -n "$url" ] && relay_cover "$host" "$url" "$key"; then
+          cover_done=$key
+        else
+          echo "$(date '+%F %T') could not relay cover $url" >&2
+          cover_failed=$key cover_failed_at=$now
+        fi
+      fi
     elif [ $warned -eq 0 ]; then
       echo "$(date '+%F %T') could not reach $host; retrying every ${INTERVAL}s" >&2
       warned=1

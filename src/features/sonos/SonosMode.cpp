@@ -4,6 +4,7 @@
 #include "Gfx.h"
 #include "SonosArt.h"
 #include "SonosClient.h"
+#include "SonosArtStore.h"
 
 extern void appReleaseHeap(uint32_t needFree, uint32_t needLargestBlock);
 
@@ -22,6 +23,7 @@ static const int TEXT_W = TFT_WIDTH - 16;
 #define C_SUBTLE  gfxTint(0x9CF3)   // artist line
 
 enum : uint8_t { K_TRACK, K_IDLE, K_STATUS };
+enum : uint8_t { ART_VIA_NONE, ART_VIA_SAVED, ART_VIA_NET, ART_VIA_MAC };
 
 // ---- text helpers (u8g2 fonts: proportional, UTF-8, Latin-1 glyphs) ---------
 static int textWidth(Arduino_GFX* g, const char* s) {
@@ -103,6 +105,70 @@ const char* SonosMode::artStatus() const {
   return sonosArtResultName((ArtResult)artResult_);
 }
 
+const char* SonosMode::artVia() const {
+  switch (artVia_) {
+    case ART_VIA_SAVED: return "saved logo";
+    case ART_VIA_NET:   return "speaker/web";
+    case ART_VIA_MAC:   return "from Mac";
+    default:            return "none";
+  }
+}
+
+bool SonosMode::artWanted(const char** url, uint32_t* key) const {
+  const SonosTrack& t = sonosTrack();
+  // Only while that cover is still the one playing.
+  if (!wantedKey_ || !t.artUrl[0] || artKeyOf(t.artUrl) != wantedKey_) return false;
+  *url = t.artUrl;
+  *key = wantedKey_;
+  return true;
+}
+
+// The cover, in order: a logo saved for this station, the cube's own fetch,
+// a copy the Mac relayed. When all fail, the Mac is asked for it and the
+// placeholder stays until the copy arrives (service() then redraws the art).
+void SonosMode::renderArt(const Settings& s) {
+  Arduino_GFX* g = gfxDev();
+  const SonosTrack& t = sonosTrack();
+  char path[32];
+  ArtResult r = ART_NO_URL;
+  artVia_ = ART_VIA_NONE;
+  wantedKey_ = 0;
+  seenRelaySeq_ = artRelaySeq();
+  g->fillRect(ART_X, ART_Y, ART, ART, C_ART_BG);   // a smaller image leaves no placeholder edge
+
+  if (t.radio) {
+    artStationPath(t.uriHash, path, sizeof(path));
+    if (artStoreHas(path)) {
+      r = sonosDrawArtFile(path, ART_X, ART_Y, ART, "saved logo");
+      if (r == ART_OK) artVia_ = ART_VIA_SAVED;
+    }
+  }
+  if (r != ART_OK && t.artUrl[0]) {
+    uint32_t key = artKeyOf(t.artUrl);
+    artRelayPath(key, path, sizeof(path));
+    bool relayed = artStoreHas(path);
+    if (!relayed) {
+      // The decoder needs ~10 KB in one piece (6 KB work area plus the
+      // socket). A theme loaded for the carousel can hold most of the heap;
+      // it steps aside while the cover streams in.
+      appReleaseHeap(16384, 10240);
+      r = sonosDrawArt(t.artUrl, ART_X, ART_Y, ART, s.httpTimeout);
+      if (r == ART_OK) artVia_ = ART_VIA_NET;
+    }
+    if (r != ART_OK && relayed) {
+      r = sonosDrawArtFile(path, ART_X, ART_Y, ART, "from Mac");
+      if (r == ART_OK) artVia_ = ART_VIA_MAC;
+    }
+    if (r != ART_OK) wantedKey_ = key;
+  }
+  artResult_ = r;
+  if (r != ART_OK) {
+    g->fillRect(ART_X, ART_Y, ART, ART, C_ART_BG);
+    if (t.radio) drawRadio(g, TFT_WIDTH / 2, ART_Y + ART / 2 + 6);
+    else         drawNote(g, TFT_WIDTH / 2, ART_Y + ART / 2);
+  }
+}
+
 void SonosMode::renderBadge() {
   Arduino_GFX* g = gfxDev();
   const int cx = TFT_WIDTH - 17, cy = 17;
@@ -144,17 +210,7 @@ void SonosMode::renderFull(const Settings& s) {
   resetFont(g);
   renderBadge();
 
-  // The decoder needs ~10 KB in one piece (6 KB work area plus the socket).
-  // A theme loaded for the carousel can hold most of the heap; it steps
-  // aside while the cover streams in.
-  appReleaseHeap(16384, 10240);
-  ArtResult r = sonosDrawArt(t.artUrl, ART_X, ART_Y, ART, s.httpTimeout);
-  artResult_ = r;
-  if (r != ART_OK) {
-    g->fillRect(ART_X, ART_Y, ART, ART, C_ART_BG);
-    if (t.radio) drawRadio(g, TFT_WIDTH / 2, ART_Y + ART / 2 + 6);
-    else         drawNote(g, TFT_WIDTH / 2, ART_Y + ART / 2);
-  }
+  renderArt(s);
 }
 
 void SonosMode::service(const Settings& s) {
@@ -163,6 +219,14 @@ void SonosMode::service(const Settings& s) {
   const SonosTrack& t = sonosTrack();
   uint8_t kind = t.hasTrack ? K_TRACK : (sonosStage() == SONOS_OK ? K_IDLE : K_STATUS);
   bool paused = t.state == SONOS_PAUSED || t.state == SONOS_STOPPED;
+
+  // A cover the Mac relayed for the track on screen: draw just the art.
+  if (!needFull_ && wantedKey_ && shownKind_ == K_TRACK && artRelaySeq() != seenRelaySeq_) {
+    seenRelaySeq_ = artRelaySeq();
+    char path[32];
+    artRelayPath(wantedKey_, path, sizeof(path));
+    if (artStoreHas(path)) renderArt(s);
+  }
 
   uint8_t stage = sonosStage();
   bool changed = needFull_ || sonosVersion() != seenVersion_ || kind != shownKind_ ||
