@@ -31,27 +31,41 @@ void artRelayPath(uint32_t key, char* out, size_t n) {
 bool artStoreHas(const char* path) { return LittleFS.exists(path); }
 bool artStoreRemove(const char* path) { return LittleFS.exists(path) && LittleFS.remove(path); }
 
-// Removes every relayed cover but `keep`.
-static void pruneRelays(const char* keep) {
-  char names[8][32];
-  uint8_t count = 0;
+// Removes the files in /art whose name starts with `prefix`, except `keep`
+// (may be null). Returns how many were removed.
+static uint16_t removeWithPrefix(const char* prefix, const char* keep) {
+  uint16_t removed = 0;
+  size_t pl = strlen(prefix);
+  for (;;) {   // in batches: deleting while a directory is open is not safe
+    char names[8][32];
+    uint8_t count = 0;
 #if defined(SMALLTV_FAMILY_ESP32)
-  File root = LittleFS.open(kDir);
-  for (File f = root.openNextFile(); f && count < 8; f = root.openNextFile()) {
-    const char* base = strrchr(f.name(), '/');
-    base = base ? base + 1 : f.name();
-    if (!strncmp(base, "r_", 2)) snprintf(names[count++], sizeof(names[0]), "%s/%s", kDir, base);
-  }
+    File root = LittleFS.open(kDir);
+    for (File f = root ? root.openNextFile() : File(); f && count < 8; f = root.openNextFile()) {
+      const char* base = strrchr(f.name(), '/');
+      base = base ? base + 1 : f.name();
+      if (strncmp(base, prefix, pl)) continue;
+      snprintf(names[count], sizeof(names[0]), "%s/%s", kDir, base);
+      if (!keep || strcmp(names[count], keep)) count++;
+    }
 #else
-  Dir d = LittleFS.openDir(kDir);
-  while (d.next() && count < 8) {
-    String name = d.fileName();
-    if (name.startsWith("r_")) snprintf(names[count++], sizeof(names[0]), "%s/%s", kDir, name.c_str());
-  }
+    Dir d = LittleFS.openDir(kDir);
+    while (d.next() && count < 8) {
+      String name = d.fileName();
+      if (!name.startsWith(prefix)) continue;
+      snprintf(names[count], sizeof(names[0]), "%s/%s", kDir, name.c_str());
+      if (!keep || strcmp(names[count], keep)) count++;
+    }
 #endif
-  for (uint8_t i = 0; i < count; i++)
-    if (strcmp(names[i], keep)) LittleFS.remove(names[i]);
+    if (!count) return removed;
+    for (uint8_t i = 0; i < count; i++)
+      if (LittleFS.remove(names[i])) removed++;
+  }
 }
+
+static void pruneRelays(const char* keep) { removeWithPrefix("r_", keep); }
+
+uint16_t artRemoveAllStationLogos() { return removeWithPrefix("s_", nullptr); }
 
 bool artUploadBegin(const char* finalPath, bool relay) {
   artUploadAbort();

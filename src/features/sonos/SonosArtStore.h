@@ -17,6 +17,8 @@ void     artStationPath(uint32_t uriHash, char* out, size_t n);
 void     artRelayPath(uint32_t key, char* out, size_t n);
 bool     artStoreHas(const char* path);
 bool     artStoreRemove(const char* path);
+// Deletes every saved station logo (not the relayed cover); returns how many.
+uint16_t artRemoveAllStationLogos();
 
 // Streaming upload into a temporary file, committed with a rename. A file
 // that is too big or does not start like a JPEG is refused.

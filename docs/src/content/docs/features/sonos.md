@@ -24,6 +24,7 @@ By default the device finds a speaker by itself with a network search (SSDP), th
 - **Music:** the album art and the track title, with the artist under it when **Artist under the title** is ticked. If a track has no artist, the album name is shown instead.
 - **Radio:** when the station sends the current song, the song and artist; otherwise the station name.
 - **TV and line-in:** *TV* or *Line-In*, with a music-note icon.
+- **Long titles:** a title or artist too wide for the screen scrolls: it pauses at the start, scrolls through, and starts over.
 - **Paused:** the same screen with a pause badge in the top-right corner. Pausing or resuming does not reload the cover.
 - **Nothing playing:** a music note, *Nothing playing*, and the room name.
 
@@ -39,7 +40,9 @@ Covers from the Mac and saved logos are kept in the device's storage, not in mem
 
 ## Station logos
 
-When a radio station is playing, the Sonos tab shows a **Station logo** card. Pick an image of the logo (PNG or JPEG, a screenshot works too) and press **Save as this station's logo**. Your browser scales it to 160×160 and converts it to JPEG; the device stores it and shows it whenever that station plays, ahead of any other source, with or without the Mac. **Remove saved logo** deletes it again.
+When a radio station is playing, the Sonos tab shows a **Station logo** card. Pick an image of the logo (PNG or JPEG, a screenshot works too) and press **Save as this station's logo**. Your browser scales it to 160×160 and converts it to JPEG; the device stores it and shows it whenever that station plays, ahead of any other source, with or without the Mac. **Remove saved logo** deletes it again, and **Remove all saved logos** clears every station at once (that button works whatever is playing).
+
+Storage looks after itself otherwise: the device keeps only the newest cover the Mac sent, each new one replacing the last, so relayed covers never pile up. Saved logos stay until you remove them; each is a small JPEG of about 5 to 15 KB.
 
 ## In the carousel
 
