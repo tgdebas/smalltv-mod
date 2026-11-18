@@ -5,6 +5,7 @@
 #include <memory>
 #include <new>
 #include "tjpgd.h"
+#include <LittleFS.h>
 
 // TJpgDec's documented minimum for JD_FASTDECODE 1 is 3500 bytes, but the
 // tables it builds grow with the image (four quantisation tables alone take
@@ -14,7 +15,8 @@
 
 namespace {
 struct ArtSession {
-  Client*  in;
+  Client*  in = nullptr;     // network source, or
+  File*    file = nullptr;   // a stored JPEG in LittleFS
   int32_t  left;        // Content-Length still to read, -1 = unknown
   uint32_t deadline;
   int      x0, y0;      // panel position of the decoded image's top-left
@@ -25,6 +27,17 @@ struct ArtSession {
 // fewer only at the end of the stream.
 size_t artInput(JDEC* jd, uint8_t* buf, size_t n) {
   ArtSession* s = (ArtSession*)jd->device;
+  if (s->file) {   // stored cover: read or skip straight from flash
+    yield();
+    if (!buf) {
+      size_t left = s->file->size() - s->file->position();
+      if (n > left) n = left;
+      s->file->seek(n, SeekCur);
+      return n;
+    }
+    int got = s->file->read(buf, n);
+    return got > 0 ? (size_t)got : 0;
+  }
   size_t done = 0;
   uint8_t sink[64];
   while (done < n) {
@@ -123,6 +136,37 @@ static void artFetchUrl(const char* url, char* out, size_t n) {
   }
 }
 
+// Decodes the JPEG the session reads and draws it centred in the box.
+// Appends to g_detail from position n.
+static ArtResult decodeJpeg(ArtSession& s, int x, int y, int box, int& n) {
+  size_t poolSize = ART_POOL_PREFERRED;
+  std::unique_ptr<uint8_t[]> pool(new (std::nothrow) uint8_t[poolSize]);
+  if (!pool) {
+    poolSize = ART_POOL_BYTES;
+    pool.reset(new (std::nothrow) uint8_t[poolSize]);
+  }
+  if (!pool) return ART_LOW_HEAP;
+  s.clipX = x; s.clipY = y; s.clipW = box; s.clipH = box;
+
+  JDEC jd;
+  jd.swap = 0;
+  JRESULT jr = jd_prepare(&jd, artInput, pool.get(), poolSize, &s);
+  if (jr != JDR_OK) {
+    n += snprintf(g_detail + n, sizeof(g_detail) - n, ", jpeg prepare %d", (int)jr);
+    return (jr == JDR_FMT3 || jr == JDR_FMT1 || jr == JDR_MEM1) ? ART_UNSUPPORTED : ART_DECODE_ERROR;
+  }
+  // Largest of 1/1, 1/2, 1/4, 1/8 that fits the box.
+  uint8_t scale = 0;
+  while (scale < 3 && ((jd.width >> scale) > box || (jd.height >> scale) > box)) scale++;
+  int ow = jd.width >> scale, oh = jd.height >> scale;
+  s.x0 = x + (box - ow) / 2;
+  s.y0 = y + (box - oh) / 2;
+  n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %ux%u 1/%u", jd.width, jd.height, 1u << scale);
+  jr = jd_decomp(&jd, artOutput, scale);
+  n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %s", jr == JDR_OK ? "drawn" : "decode err");
+  return jr == JDR_OK ? ART_OK : ART_DECODE_ERROR;
+}
+
 static ArtResult fetchAndDraw(const char* url, int x, int y, int box, uint16_t timeoutMs) {
   bool https = !strncmp(url, "https://", 8);
   uint32_t t0 = millis();
@@ -132,7 +176,10 @@ static ArtResult fetchAndDraw(const char* url, int x, int y, int box, uint16_t t
 
   std::unique_ptr<NetClient> client;
   if (https) {
-    if (blk < 16000 + ART_POOL_BYTES) return ART_LOW_HEAP;
+    if (blk < 16000 + ART_POOL_BYTES) {
+      snprintf(g_detail + n, sizeof(g_detail) - n, ", https needs ~20 KB");
+      return ART_LOW_HEAP;
+    }
     client.reset(platformMakeSecureClient(4096));
   } else {
     if (blk < ART_POOL_BYTES + 4096) return ART_LOW_HEAP;
@@ -156,42 +203,14 @@ static ArtResult fetchAndDraw(const char* url, int x, int y, int box, uint16_t t
   String type = http.header("Content-Type");
   n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %.20s, %d B", type.c_str(), http.getSize());
 
-  size_t poolSize = ART_POOL_PREFERRED;
-  std::unique_ptr<uint8_t[]> pool(new (std::nothrow) uint8_t[poolSize]);
-  if (!pool) {
-    poolSize = ART_POOL_BYTES;
-    pool.reset(new (std::nothrow) uint8_t[poolSize]);
-  }
-  if (!pool) { http.end(); return ART_LOW_HEAP; }
-
   ArtSession s;
   s.in = &http.getStream();
   s.left = http.getSize();
   s.deadline = millis() + (uint32_t)timeoutMs * 2;   // a cover is ~30-150 KB
-  s.clipX = x; s.clipY = y; s.clipW = box; s.clipH = box;
-
-  JDEC jd;
-  jd.swap = 0;
-  JRESULT jr = jd_prepare(&jd, artInput, pool.get(), poolSize, &s);
-  if (jr != JDR_OK) {
-    http.end();
-    snprintf(g_detail + n, sizeof(g_detail) - n, ", jpeg prepare %d", (int)jr);
-    return (jr == JDR_FMT3 || jr == JDR_FMT1 || jr == JDR_MEM1) ? ART_UNSUPPORTED : ART_DECODE_ERROR;
-  }
-
-  // Largest of 1/1, 1/2, 1/4, 1/8 that fits the box.
-  uint8_t scale = 0;
-  while (scale < 3 && ((jd.width >> scale) > box || (jd.height >> scale) > box)) scale++;
-  int ow = jd.width >> scale, oh = jd.height >> scale;
-  s.x0 = x + (box - ow) / 2;
-  s.y0 = y + (box - oh) / 2;
-  n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %ux%u 1/%u", jd.width, jd.height, 1u << scale);
-
-  jr = jd_decomp(&jd, artOutput, scale);
+  ArtResult r = decodeJpeg(s, x, y, box, n);
   http.end();
-  snprintf(g_detail + n, sizeof(g_detail) - n, ", %s %lu ms", jr == JDR_OK ? "drawn" : "decode err",
-           (unsigned long)(millis() - t0));
-  return jr == JDR_OK ? ART_OK : ART_DECODE_ERROR;
+  snprintf(g_detail + n, sizeof(g_detail) - n, ", %lu ms", (unsigned long)(millis() - t0));
+  return r;
 }
 
 ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutMs) {
@@ -211,5 +230,18 @@ ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutM
       strlcpy(g_detail, both, sizeof(g_detail));
     }
   }
+  return r;
+}
+
+ArtResult sonosDrawArtFile(const char* path, int x, int y, int box, const char* label) {
+  File f = LittleFS.open(path, "r");
+  if (!f) return ART_NO_URL;
+  int n = snprintf(g_detail, sizeof(g_detail), "%s, %u B", label, (unsigned)f.size());
+  ArtSession s;
+  s.file = &f;
+  s.left = f.size();
+  s.deadline = millis() + 10000;
+  ArtResult r = decodeJpeg(s, x, y, box, n);
+  f.close();
   return r;
 }

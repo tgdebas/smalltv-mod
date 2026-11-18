@@ -74,5 +74,13 @@ check net-noaddr "$(printf '%s\n' "$ns_noaddr" | parse_net)" "345678 123456"
 check rate "$(rate_mbps 1000000000 1030000000 5)" "48.00"
 check rate-reset "$(rate_mbps 900 100 5)" "0.00"
 
+# The device's reply to a push: plain, or naming a cover to relay.
+check reply-plain-key "$(printf '%s' '{"ok":true}' | reply_key)" ""
+cover='{"ok":true,"art":"https://cdn-profiles.tunein.com/s6712/images/logoq.jpg?t=1&x=2","key":"0a1b2c3d"}'
+check reply-art "$(printf '%s' "$cover" | reply_art)" "https://cdn-profiles.tunein.com/s6712/images/logoq.jpg?t=1&x=2"
+check reply-key "$(printf '%s' "$cover" | reply_key)" "0a1b2c3d"
+check reply-spaced "$(printf '%s' '{"ok": true, "art": "http://x/b.jpg", "key": "00000002"}' | reply_key)" "00000002"
+check reply-escaped-slash "$(printf '%s' '{"art":"http:\/\/x\/a.jpg","key":"00000001"}' | reply_art)" "http://x/a.jpg"
+
 [ $fail -eq 0 ] && echo "mac script tests: all passed"
 exit $fail

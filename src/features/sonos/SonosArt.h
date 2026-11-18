@@ -26,5 +26,9 @@ const char* sonosArtResultName(ArtResult r);
 // One line on what the last draw saw (URL scheme, HTTP code, type, size,
 // image dimensions, heap), shown in the web UI to tell failures apart.
 const char* sonosArtDetail();
+// The same, from a JPEG stored in LittleFS (a saved station logo, or a cover
+// the Mac relayed). `label` starts the detail line ("saved logo", "from Mac").
+// ART_NO_URL when the file is missing.
+ArtResult sonosDrawArtFile(const char* path, int x, int y, int box, const char* label);
 
 #define SONOS_ART_URL_MAX 320

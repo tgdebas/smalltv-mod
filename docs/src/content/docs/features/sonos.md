@@ -27,7 +27,19 @@ By default the device finds a speaker by itself with a network search (SSDP), th
 - **Paused:** the same screen with a pause badge in the top-right corner. Pausing or resuming does not reload the cover.
 - **Nothing playing:** a music note, *Nothing playing*, and the room name.
 
-Album art comes from the speaker, which fetches it from the music service and serves it over plain HTTP. The device decodes it as it downloads, scaled down to fit the screen, so a full-size cover never has to fit in memory. Covers in a format the decoder cannot read (progressive JPEG or PNG) show a music-note icon instead. The **Now playing** card's **Album art** line says why a cover did not show.
+## Where covers come from
+
+The device tries, in this order:
+
+1. **A logo you saved for the radio station playing** (see below).
+2. **The cover itself**, from the speaker or the music service. The device decodes it as it downloads, scaled down to fit the screen, so a full-size cover never has to fit in memory. For radio, it is the station's logo from the speaker's station info.
+3. **A copy relayed by your Mac.** Some covers the device cannot fetch on its own: images only served over HTTPS (a secure connection needs more memory than the ESP8266 can spare), PNG images, or any cover while memory is short. When the [Mac stats](/smalltv-mod/features/sysmon/) script runs, the device asks it for those: the Mac downloads the image, shrinks it and converts it to JPEG with the built-in `sips`, and sends it over. The cover appears a few seconds later.
+
+Covers from the Mac and saved logos are kept in the device's storage, not in memory. Without any of them, radio shows a radio icon and everything else a music note. The **Now playing** card's **Shown from**, **Album art** and **Art details** lines say which source was used, or why a cover did not show.
+
+## Station logos
+
+When a radio station is playing, the Sonos tab shows a **Station logo** card. Pick an image of the logo (PNG or JPEG, a screenshot works too) and press **Save as this station's logo**. Your browser scales it to 160×160 and converts it to JPEG; the device stores it and shows it whenever that station plays, ahead of any other source, with or without the Mac. **Remove saved logo** deletes it again.
 
 ## In the carousel
 

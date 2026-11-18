@@ -20,6 +20,8 @@ This starts sending at once, and again after every login (it installs a LaunchAg
 
 To remove it: `bash smalltv-stats.sh uninstall`.
 
+The same script also relays Sonos covers the device cannot fetch on its own (HTTPS-only images, PNG): see [Where covers come from](/smalltv-mod/features/sonos/#where-covers-come-from). Set `SMALLTV_STATS_COVERS=0` in its environment to turn that off.
+
 The script needs no password, even when the web page has one: like the Claude usage push, `/api/sysmon` only sets the numbers on the screen.
 
 ## What the numbers mean
