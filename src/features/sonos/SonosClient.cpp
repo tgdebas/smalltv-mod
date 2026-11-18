@@ -87,6 +87,13 @@ void sonosInit(const Settings& s) {
 void sonosForceRefresh() { g_nextPollMs = millis(); }
 
 // ---- SOAP -------------------------------------------------------------------
+// Speakers answer on the LAN in well under a second. The shared HTTP timeout
+// (8 s by default) suits slow internet APIs, but here a lost reply would hold
+// the main loop that long, freezing theme animations and the title scroll.
+static uint16_t soapTimeout(const Settings& s) {
+  return s.httpTimeout < SONOS_SOAP_TIMEOUT_MS ? s.httpTimeout : SONOS_SOAP_TIMEOUT_MS;
+}
+
 // One POST to a speaker; on 200 the caller scans the body. HTTP/1.0 keeps the
 // body unchunked, so the scanner reads raw XML.
 struct Soap {
@@ -205,14 +212,14 @@ static void readTopology(const Settings& s) {
   g_nextTopoMs = millis() + SONOS_TOPOLOGY_MS;
   Soap soap;
   if (!soap.call(g_seed, F("/ZoneGroupTopology/Control"), F("ZoneGroupTopology"),
-                 F("GetZoneGroupState"), F(""), s.httpTimeout)) {
+                 F("GetZoneGroupState"), F(""), soapTimeout(s))) {
     noteFailure(soap.code);
     // A seed found by SSDP may be gone; search again next time round.
     if (s.sonos.host.length() == 0) g_seed[0] = 0;
     return;
   }
   g_roomCount = 0;
-  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 6000);
+  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 4000);
   SonosTopology topo;
   if (!sonosParseTopology(x, s.sonos.room.c_str(), topo, addRoom)) {
     g_coord[0] = 0;
@@ -231,11 +238,11 @@ static void readTopology(const Settings& s) {
 static bool readTransport(const Settings& s, SonosPlay& out) {
   Soap soap;
   if (!soap.call(g_coord, F("/MediaRenderer/AVTransport/Control"), F("AVTransport"),
-                 F("GetTransportInfo"), F("<InstanceID>0</InstanceID>"), s.httpTimeout)) {
+                 F("GetTransportInfo"), F("<InstanceID>0</InstanceID>"), soapTimeout(s))) {
     noteFailure(soap.code);
     return false;
   }
-  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 3000);
+  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 2000);
   out = sonosParseTransport(x);
   return true;
 }
@@ -244,20 +251,20 @@ static bool readPosition(const Settings& s, SonosTrack& t, bool& redirect) {
   redirect = false;
   Soap soap;
   if (!soap.call(g_coord, F("/MediaRenderer/AVTransport/Control"), F("AVTransport"),
-                 F("GetPositionInfo"), F("<InstanceID>0</InstanceID>"), s.httpTimeout)) {
+                 F("GetPositionInfo"), F("<InstanceID>0</InstanceID>"), soapTimeout(s))) {
     noteFailure(soap.code);
     return false;
   }
-  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 3000);
+  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 2000);
   return sonosParsePosition(x, g_coord, t, redirect);
 }
 
 static bool readStationArt(const Settings& s) {
   Soap soap;
   if (!soap.call(g_coord, F("/MediaRenderer/AVTransport/Control"), F("AVTransport"),
-                 F("GetMediaInfo"), F("<InstanceID>0</InstanceID>"), s.httpTimeout))
+                 F("GetMediaInfo"), F("<InstanceID>0</InstanceID>"), soapTimeout(s)))
     return false;   // not a poll failure: the track itself was read fine
-  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 3000);
+  XmlScanner x(soap.http.getStream(), soap.http.getSize(), 2000);
   sonosParseMediaInfo(x, g_coord, g_stationArt, sizeof(g_stationArt));
   return true;
 }

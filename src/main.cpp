@@ -10,6 +10,7 @@
 // License: WTFPL
 #include <Arduino.h>
 #include "Platform.h"
+#include <LittleFS.h>
 #include "config.h"
 #include "Settings.h"
 #include "Net.h"
@@ -384,6 +385,27 @@ void setup() {
   Serial.println("[boot] settings");
   settingsBegin();
   loadSettings(g_settings);
+#if defined(SMALLTV_FAMILY_ESP8266)
+  // Once per device: erase the SDK's own area at the end of flash (RF
+  // calibration and system parameters). An install over the stock OTA (the
+  // SmallTV-ultra loader path) never erases it, so the stock firmware's data
+  // stays in force there; a SmallTV-ultra so installed joined with "no IP"
+  // over and over, cleared at random by a power cycle. erase_flash over UART
+  // is the documented cure; this does the same for those 16 KB without UART.
+  // Nothing of ours lives there (settings, themes and covers are in LittleFS,
+  // Wi-Fi credentials in settings), and the SDK rebuilds it on the restart.
+  if (!LittleFS.exists("/.sdk-area-cleared")) {
+    File marker = LittleFS.open("/.sdk-area-cleared", "w");
+    if (marker) {
+      marker.print("1");
+      marker.close();
+      Serial.println(F("[boot] clearing the SDK flash area once, then restarting"));
+      ESP.eraseConfig();
+      delay(100);
+      ESP.restart();
+    }
+  }
+#endif
 
 #if WITH_HA
   // Home Assistant's memory (the screen store and the MQTT client) is taken
@@ -450,7 +472,26 @@ void setup() {
   }
 }
 
+// Longest gap between two loop() passes, over the current and the previous
+// minute: a long one means something blocked (a slow network request), which
+// freezes theme animations and the Sonos title scroll. Reported by /api/status.
+static uint32_t g_loopLast = 0, g_loopMaxNow = 0, g_loopMaxPrev = 0, g_loopWindowStart = 0;
+uint32_t appLoopMaxMs() { return g_loopMaxNow > g_loopMaxPrev ? g_loopMaxNow : g_loopMaxPrev; }
+
 void loop() {
+  {
+    uint32_t now = millis();
+    if (g_loopLast) {
+      uint32_t gap = now - g_loopLast;
+      if (gap > g_loopMaxNow) g_loopMaxNow = gap;
+    }
+    g_loopLast = now;
+    if (now - g_loopWindowStart >= 60000UL) {
+      g_loopMaxPrev = g_loopMaxNow;
+      g_loopMaxNow = 0;
+      g_loopWindowStart = now;
+    }
+  }
   netLoop();
   webPortalLoop();
 

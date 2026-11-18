@@ -233,6 +233,35 @@ ArtResult sonosDrawArt(const char* url, int x, int y, int box, uint16_t timeoutM
   return r;
 }
 
+// Walks a stored JPEG's markers up to its frame header, to name what the
+// decoder refused: "SOF2" is progressive, "Y12" an unsupported chroma
+// layout, and so on. Appends e.g. ", SOF0 3c Y22 T00/11/11" to g_detail.
+static void describeJpeg(File& f, int& n) {
+  f.seek(2, SeekSet);
+  uint8_t h[4];
+  char sof[24] = "";
+  char tables[16] = "";
+  for (int guard = 0; guard < 40 && f.read(h, 4) == 4; guard++) {
+    if (h[0] != 0xFF) break;
+    uint16_t len = (uint16_t)(h[2] << 8 | h[3]);
+    uint32_t next = f.position() + len - 2;
+    uint8_t m = h[1];
+    if (m >= 0xC0 && m <= 0xCF && m != 0xC4 && m != 0xC8 && m != 0xCC) {
+      uint8_t b[12];
+      int got = f.read(b, sizeof(b));
+      if (got >= 9) snprintf(sof, sizeof(sof), "SOF%u %uc Y%02X", m - 0xC0, b[5], b[7]);
+      else snprintf(sof, sizeof(sof), "SOF%u", m - 0xC0);
+    } else if (m == 0xDA) {   // scan: the table numbers of each component
+      uint8_t b[7];
+      int got = f.read(b, sizeof(b));
+      if (got >= 7 && b[0] == 3) snprintf(tables, sizeof(tables), "T%02X/%02X/%02X", b[2], b[4], b[6]);
+      break;
+    }
+    f.seek(next, SeekSet);
+  }
+  n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %s %s", sof[0] ? sof : "no SOF", tables);
+}
+
 ArtResult sonosDrawArtFile(const char* path, int x, int y, int box, const char* label) {
   File f = LittleFS.open(path, "r");
   if (!f) return ART_NO_URL;
@@ -242,6 +271,7 @@ ArtResult sonosDrawArtFile(const char* path, int x, int y, int box, const char* 
   s.left = f.size();
   s.deadline = millis() + 10000;
   ArtResult r = decodeJpeg(s, x, y, box, n);
+  if (r == ART_UNSUPPORTED || r == ART_DECODE_ERROR) describeJpeg(f, n);
   f.close();
   return r;
 }

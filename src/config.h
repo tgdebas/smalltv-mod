@@ -296,6 +296,7 @@
 #define SONOS_BG_POLL_SEC     10    // poll period while another carousel page shows
 #define SONOS_TOPOLOGY_MS   60000UL  // re-resolve the room's coordinator this often
 #define SONOS_ART_BOX         164    // album art fits in this square (px)
+#define SONOS_SOAP_TIMEOUT_MS 1500   // per speaker request (they answer on the LAN)
 
 // Claude usage mode: once data stops arriving for this long (PC asleep, daemon
 // stopped, network down) the screen switches from the stats to the idle mascot
