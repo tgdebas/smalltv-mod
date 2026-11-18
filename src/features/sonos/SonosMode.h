@@ -31,6 +31,23 @@ class SonosMode : public DisplayMode {
   void renderArt(const Settings& s);
   void renderBadge();
 
+  // A line too wide for the screen scrolls (a marquee) instead of being cut.
+  struct Marquee {
+    bool           active = false;
+    const uint8_t* font = nullptr;
+    uint16_t       color = 0;
+    int16_t        base = 0;       // text baseline on screen
+    int16_t        width = 0;      // text width, px
+    int16_t        offset = 0;     // scrolled so far, px
+    uint32_t       nextMs = 0;     // next step (or the end of the pause at the start)
+    char           text[100];
+  };
+  void setLine(Marquee& m, const char* text, const uint8_t* font, int baseline, uint16_t color);
+  void drawMarquee(Marquee& m);
+  void tickMarquees();
+  void stopMarquees();
+  Marquee title_, artist_;
+
   uint32_t seenVersion_ = 0xFFFFFFFF;
   bool     needFull_ = true;
   bool     shownPaused_ = false;

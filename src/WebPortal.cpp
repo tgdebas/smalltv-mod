@@ -618,7 +618,8 @@ static void handleSysmonPush() {
 // Outside the password like /api/sysmon (the same script sends it), and all
 // it can change is the picture on the screen. POST /api/sonos/logo, multipart
 // JPEG: the Sonos tab saves a logo for the radio station playing; with
-// ?remove=1 and no file it deletes that logo. Behind the password.
+// ?remove=1 and no file it deletes that logo, ?removeAll=1 every saved
+// logo. Behind the password.
 static bool g_artUpStarted = false, g_artUpOk = false;
 
 static bool parseKey(const String& hex, uint32_t& out) {
@@ -673,6 +674,15 @@ static void handleArtRelayDone() {
 static void handleLogoDone() {
   if (!requireAuth()) return;
   bool ok;
+  if (server.hasArg("removeAll")) {
+    uint16_t n = artRemoveAllStationLogos();
+    g_artUpOk = false;
+    g_sonosMode.wake(*S);
+    char out[40];
+    snprintf(out, sizeof(out), "{\"ok\":true,\"removed\":%u}", (unsigned)n);
+    server.send(200, "application/json", out);
+    return;
+  }
   if (server.hasArg("remove")) {
     const SonosTrack& t = sonosTrack();
     char path[32];

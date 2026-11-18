@@ -339,11 +339,14 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
    <small class="hint">The device reads the track and album art straight from the speakers on your network: no account, no cloud, nothing to install on the Mac. Covers that are not baseline JPEG show a music note instead.</small>
   </div>
   <div class="card"><h2>Now playing</h2><div id="sonosNow" class="muted">-</div></div>
-  <div class="card" id="sonosLogoCard" style="display:none"><h2>Station logo</h2>
+  <div class="card" id="sonosLogoCard"><h2>Station logos</h2>
    <div id="sonosLogoNow" class="muted"></div>
-   <input id="sonosLogoFile" type="file" accept="image/*" style="margin:8px 0">
-   <button onclick="sonosLogoSave()">Save as this station's logo</button>
-   <button onclick="sonosLogoRemove()">Remove saved logo</button>
+   <div id="sonosLogoStation" style="display:none">
+    <input id="sonosLogoFile" type="file" accept="image/*" style="margin:8px 0">
+    <button onclick="sonosLogoSave()">Save as this station's logo</button>
+    <button onclick="sonosLogoRemove()">Remove saved logo</button>
+   </div>
+   <button onclick="sonosLogoRemoveAll()" style="margin-top:8px">Remove all saved logos</button>
    <small class="hint">For a radio station whose logo the cube cannot download. Pick any image of the logo (PNG or JPEG, a screenshot works too). Your browser shrinks it to 160&times;160 and converts it to JPEG before sending. It is kept in the cube's storage and shown whenever this station plays, ahead of any other source. Without a saved logo, the Mac stats script fetches covers the cube cannot (see the Mac stats tab).</small>
   </div>
  </section>
@@ -996,6 +999,9 @@ function sonosLogoSave(){var f=$('sonosLogoFile');f=f&&f.files&&f.files[0];if(!f
  img.src=u}
 function sonosLogoRemove(){if(!confirm('Remove the saved logo for this station?'))return;
  fetch('/api/sonos/logo?remove=1',{method:'POST'}).then(function(r){toast(r.ok?'Logo removed':'No saved logo for this station');setTimeout(loadStatus,800)})}
+function sonosLogoRemoveAll(){if(!confirm('Remove every saved station logo?'))return;
+ j('/api/sonos/logo?removeAll=1',{method:'POST'}).then(function(d){toast(d.removed?('Removed '+d.removed+' logo'+(d.removed===1?'':'s')):'No saved logos');setTimeout(loadStatus,800)})
+  .catch(function(e){toast(e.message)})}
 function sonosLine(o){
  if(!o)return '';
  if(o.stage!=='ok')return o.stage+(o.room?' ('+o.room+')':'');
@@ -1004,8 +1010,8 @@ function sonosLine(o){
 function sonosShow(o){var n=$('sonosNow');if(!n||!o)return;
  n.innerHTML=kv('Status',esc(o.stage))+kv('Room',esc(o.room||'-'))+kv('Speaker',esc(o.coordinator||'-'))+
   kv('State',esc(o.state))+kv('Title',esc(o.title||'-'))+kv('Artist',esc(o.artist||'-'))+kv('Album art',esc(o.art||'-'))+kv('Art source',esc(o.artSource||'-'))+kv('Shown from',esc(o.artVia||'-'))+kv('Art details',esc(o.artDetail||(o.art==='no art'?'the speaker gave no cover for this track':'none yet: shows after the next track change')))+kv('Track',esc(o.trackUri||'-'));
- var lc=$('sonosLogoCard'); if(lc)lc.style.display=o.radio?'block':'none';
- var ln=$('sonosLogoNow'); if(ln)ln.textContent=o.hasLogo?'A logo is saved for this station.':'No logo saved for this station.';
+ var ls=$('sonosLogoStation'); if(ls)ls.style.display=o.radio?'block':'none';
+ var ln=$('sonosLogoNow'); if(ln)ln.textContent=!o.radio?'No radio station playing: start one to save its logo.':(o.hasLogo?'A logo is saved for this station.':'No logo saved for this station.');
  var dl=$('sonosRooms'); if(dl)dl.innerHTML=(o.rooms||[]).map(function(r){return '<option value="'+esc(r)+'">'}).join('');
  var f=$('sonosFound'); if(f)f.textContent=(o.rooms&&o.rooms.length)?'Rooms found: '+o.rooms.join(', ')+'.':'';
 }

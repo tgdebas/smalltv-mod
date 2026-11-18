@@ -2,6 +2,7 @@
 #include <Arduino_GFX_Library.h>
 #include <U8g2lib.h>
 #include "Gfx.h"
+#include <new>
 #include "SonosArt.h"
 #include "SonosClient.h"
 #include "SonosArtStore.h"
@@ -60,6 +61,41 @@ static void drawLine(Arduino_GFX* g, const char* text, const uint8_t* font,
   g->setTextColor(color);
   g->setCursor((TFT_WIDTH - textWidth(g, buf)) / 2, baseline);
   g->print(buf);
+}
+
+// ---- scrolling lines -----------------------------------------------------------
+// A line wider than the screen is drawn into a 1-bit strip off screen and
+// copied to the panel in one write per frame: no flicker, and 616 bytes of
+// heap instead of the ~10 KB a colour strip would need on the ESP8266. The
+// strip exists only while a line scrolls.
+static const int STRIP_X = (TFT_WIDTH - TEXT_W) / 2;
+static const int STRIP_W = TEXT_W;                   // a multiple of 8
+static const int STRIP_H = 22;
+static const int STRIP_ASCENT = 17;                  // strip top = baseline - this
+static const int MARQUEE_GAP = 48;                   // between the end and the next copy
+static const uint32_t MARQUEE_STEP_MS = 50;          // 2 px per step: 40 px/s
+static const int MARQUEE_STEP_PX = 2;
+static const uint32_t MARQUEE_PAUSE_MS = 2500;       // still at the start of each pass
+
+class MonoStrip : public Arduino_GFX {
+ public:
+  MonoStrip() : Arduino_GFX(STRIP_W, STRIP_H) {}
+  bool begin(int32_t) override { return true; }
+  void writePixelPreclipped(int16_t x, int16_t y, uint16_t c) override {
+    uint32_t i = (uint32_t)y * STRIP_W + x;
+    if (c) bits[i >> 3] |= (uint8_t)(0x80 >> (i & 7));
+  }
+  uint8_t* bits = nullptr;
+};
+static MonoStrip g_strip;
+
+static bool stripAlloc() {
+  if (!g_strip.bits) g_strip.bits = new (std::nothrow) uint8_t[STRIP_W * STRIP_H / 8];
+  return g_strip.bits != nullptr;
+}
+static void stripFree() {
+  delete[] g_strip.bits;
+  g_strip.bits = nullptr;
 }
 
 static void resetFont(Arduino_GFX* g) {
@@ -169,6 +205,68 @@ void SonosMode::renderArt(const Settings& s) {
   }
 }
 
+void SonosMode::setLine(Marquee& m, const char* text, const uint8_t* font, int baseline,
+                        uint16_t color) {
+  m.active = false;
+  if (!text || !text[0]) return;
+  Arduino_GFX* g = gfxDev();
+  g->setFont(font);
+  g->setUTF8Print(true);
+  g->setTextWrap(false);
+  g->setTextSize(1);
+  int w = textWidth(g, text);
+  if (w <= TEXT_W || !stripAlloc()) {   // fits (or no memory to scroll): as before
+    drawLine(g, text, font, baseline, color);
+    return;
+  }
+  strlcpy(m.text, text, sizeof(m.text));
+  m.font = font;
+  m.color = color;
+  m.base = baseline;
+  m.width = w;
+  m.offset = 0;
+  m.nextMs = millis() + MARQUEE_PAUSE_MS;
+  m.active = true;
+  drawMarquee(m);
+}
+
+void SonosMode::drawMarquee(Marquee& m) {
+  if (!g_strip.bits) return;
+  memset(g_strip.bits, 0, STRIP_W * STRIP_H / 8);
+  g_strip.setFont(m.font);
+  g_strip.setUTF8Print(true);
+  g_strip.setTextWrap(false);
+  g_strip.setTextSize(1);
+  g_strip.setTextColor(1);
+  // The text, and its next copy once the end has scrolled in.
+  for (int x = -m.offset; x < STRIP_W; x += m.width + MARQUEE_GAP) {
+    g_strip.setCursor(x, STRIP_ASCENT);
+    g_strip.print(m.text);
+  }
+  gfxDev()->drawBitmap(STRIP_X, m.base - STRIP_ASCENT, g_strip.bits, STRIP_W, STRIP_H,
+                       m.color, C_BLACK);
+}
+
+void SonosMode::tickMarquees() {
+  Marquee* lines[] = {&title_, &artist_};
+  for (Marquee* m : lines) {
+    if (!m->active || (int32_t)(millis() - m->nextMs) < 0) continue;
+    m->offset += MARQUEE_STEP_PX;
+    if (m->offset >= m->width + MARQUEE_GAP) {   // one full pass: back to the start, pause
+      m->offset = 0;
+      m->nextMs = millis() + MARQUEE_PAUSE_MS;
+    } else {
+      m->nextMs = millis() + MARQUEE_STEP_MS;
+    }
+    drawMarquee(*m);
+  }
+}
+
+void SonosMode::stopMarquees() {
+  title_.active = artist_.active = false;
+  stripFree();
+}
+
 void SonosMode::renderBadge() {
   Arduino_GFX* g = gfxDev();
   const int cx = TFT_WIDTH - 17, cy = 17;
@@ -184,6 +282,7 @@ void SonosMode::renderFull(const Settings& s) {
   const SonosTrack& t = sonosTrack();
 
   if (shownKind_ != K_TRACK) {
+    stopMarquees();
     resetFont(g);
     if (shownKind_ == K_IDLE) {
       g->fillScreen(C_BLACK);
@@ -205,8 +304,10 @@ void SonosMode::renderFull(const Settings& s) {
   g->fillScreen(C_BLACK);
   g->fillRect(ART_X, ART_Y, ART, ART, C_ART_BG);
   // Text first: it shows at once, and the cover streams in over it.
-  drawLine(g, t.title, u8g2_font_helvB14_tf, TITLE_BASE, C_WHITE);
-  if (s.sonos.showArtist) drawLine(g, t.artist, u8g2_font_helvR12_tf, ARTIST_BASE, C_SUBTLE);
+  stopMarquees();
+  setLine(title_, t.title, u8g2_font_helvB14_tf, TITLE_BASE, C_WHITE);
+  if (s.sonos.showArtist) setLine(artist_, t.artist, u8g2_font_helvR12_tf, ARTIST_BASE, C_SUBTLE);
+  if (!title_.active && !artist_.active) stripFree();
   resetFont(g);
   renderBadge();
 
@@ -219,6 +320,8 @@ void SonosMode::service(const Settings& s) {
   const SonosTrack& t = sonosTrack();
   uint8_t kind = t.hasTrack ? K_TRACK : (sonosStage() == SONOS_OK ? K_IDLE : K_STATUS);
   bool paused = t.state == SONOS_PAUSED || t.state == SONOS_STOPPED;
+
+  if (!needFull_ && shownKind_ == K_TRACK) tickMarquees();
 
   // A cover the Mac relayed for the track on screen: draw just the art.
   if (!needFull_ && wantedKey_ && shownKind_ == K_TRACK && artRelaySeq() != seenRelaySeq_) {
