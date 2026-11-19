@@ -62,7 +62,22 @@
 // clients got no DHCP lease and it could not get one from the router either,
 // with the right password. Costs about 200 ms at boot and some extra current
 // during it; does not depend on what is in flash.
-RF_PRE_INIT() { system_phy_set_powerup_option(3); }
+//
+// The backlight goes off first, before that calibration. After a software
+// restart (an update, the Reboot button, the setup-mode retry) the backlight
+// pin is not driven yet and the panel can be lit while the radio calibrates;
+// from a cold power-up it starts dark. On a SmallTV-ultra a software restart
+// never cleared "no IP", while a power cycle sometimes did. gfxBegin() turns
+// the backlight on again a moment later. Plain register writes: this runs
+// before the Arduino core is set up.
+RF_PRE_INIT() {
+#if defined(TFT_BL)
+  GPES = (1u << TFT_BL);                                  // drive the pin
+  if (TFT_BL_DEFAULT_INVERTED) GPOS = (1u << TFT_BL);     // active-low: high is off
+  else                         GPOC = (1u << TFT_BL);
+#endif
+  system_phy_set_powerup_option(3);
+}
 #endif
 
 // ---- mode registry --------------------------------------------------------
