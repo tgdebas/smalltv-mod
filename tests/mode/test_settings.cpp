@@ -116,7 +116,7 @@ static void testSonos() {
 static void testRadio() {
   Settings s;
   s.setDefaults();
-  CHECK(s.wifiTxQdBm == 82 && s.wifiPhy == WIFI_PHY_SET_N, "defaults: 20.5 dBm, 802.11n");
+  CHECK(s.wifiTxQdBm == 78 && s.wifiPhy == WIFI_PHY_SET_N, "defaults: 19.5 dBm (the SDK default), 802.11n");
   apply(s, "{\"wifiTx\":14,\"wifiPhy\":\"g\"}");
   CHECK(s.wifiTxQdBm == 56 && s.wifiPhy == WIFI_PHY_SET_G, "14 dBm, 802.11g: %u %u", s.wifiTxQdBm, s.wifiPhy);
   apply(s, "{\"wifiTx\":99,\"wifiPhy\":\"x\"}");

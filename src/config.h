@@ -281,12 +281,15 @@
 // speakers on the LAN (port 1400, plain HTTP): it follows the configured room
 // to its group coordinator, polls the current track, and streams the album art
 // through the speaker's /getaa proxy into a JPEG decoder.
-// ESP8266 Wi-Fi transmit power (dBm, 0..20.5) set before every join and
-// before the setup hotspot. 20.5 is the SDK maximum, which a SmallTV-ultra on
-// a FRITZ! mesh needed. A board whose supply sags on transmit bursts sends
-// garbled frames at full power; a build can lower it with -D WIFI_TX_DBM=15.
+// ESP8266 Wi-Fi transmit power (dBm, 0..20.5), the default for the WiFi
+// tab's Radio card, set before every join and before the setup hotspot.
+// 19.5 is the SDK's own default (byte 34 of the PHY init data, 78 quarter
+// dBm), which the GeekMagic stock firmware (V9.0.50) never changes; it has
+// the same PHY table and SDK build as this firmware, and the same 802.11n.
+// 20.5, the maximum, was forced here before; a SmallTV-ultra on it kept
+// joining with "no IP". The Radio card offers 20.5 down to 8.
 #ifndef WIFI_TX_DBM
-#define WIFI_TX_DBM 20.5f
+#define WIFI_TX_DBM 19.5f
 #endif
 // Settings::wifiPhy values.
 #define WIFI_PHY_SET_N 0
