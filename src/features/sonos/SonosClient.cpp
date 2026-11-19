@@ -12,6 +12,12 @@ static uint32_t   g_publishedKey = 0;   // fingerprint of what g_version last an
 // the TrackURI hash), not on every poll.
 static char       g_stationArt[SONOS_ART_LEN] = "";
 static uint32_t   g_stationUri = 0;
+// One speaker request per sonosService() call, so the main loop (theme
+// animations, the title scroll) gets control back between them: a poll is the
+// transport state, then on later passes the track, then for radio the logo.
+enum : uint8_t { STEP_IDLE, STEP_POSITION, STEP_STATION };
+static uint8_t    g_step = STEP_IDLE;
+static uint8_t    g_bgPolls = 0;      // background polls since the last track read
 static bool       g_error = false;
 static SonosStage g_stage = SONOS_IDLE;
 static uint32_t   g_lastPlayingMs = 0;
@@ -72,6 +78,7 @@ void sonosInit(const Settings& s) {
   g_publishedKey = 0;
   g_stationArt[0] = 0;
   g_stationUri = 0;
+  g_step = STEP_IDLE;
   g_error = false;
   g_stage = SONOS_IDLE;
   g_lastPlayingMs = 0;
@@ -270,64 +277,91 @@ static bool readStationArt(const Settings& s) {
 }
 
 // ---------------------------------------------------------------------------------
+static bool due(uint32_t at) { return (int32_t)(millis() - at) >= 0; }
+
+static void applyStationArt(SonosTrack& t) {
+  if (!g_stationArt[0]) return;
+  strlcpy(t.artUrl, g_stationArt, sizeof(t.artUrl));
+  t.artSource = SONOS_ART_STATION;
+  t.hasTrack = true;
+}
+
+static void publish() {
+  const SonosTrack& t = g_track;
+  uint32_t key = sonosTrackKey(t) ^ ((uint32_t)t.state << 24) ^ (t.hasTrack ? 0x5A5A5A5Au : 0);
+  if (key != g_publishedKey) {
+    g_publishedKey = key;
+    g_version++;
+  }
+}
+
 void sonosService(const Settings& s, bool background) {
   if (WiFi.status() != WL_CONNECTED) return;
 
   if (!g_seed[0]) { ssdpService(); return; }
 
-  if (!g_coord[0] || (int32_t)(millis() - g_nextTopoMs) >= 0) {
-    if ((int32_t)(millis() - g_nextTopoMs) < 0) return;
+  if (!g_coord[0] || due(g_nextTopoMs)) {
+    if (!due(g_nextTopoMs)) return;
     readTopology(s);
-    if (!g_coord[0]) return;
+    g_step = STEP_IDLE;
+    return;   // that was this pass's request
   }
 
-  if ((int32_t)(millis() - g_nextPollMs) < 0) return;
+  // Parsed straight into g_track: a second ~480-byte copy is heap the
+  // ESP8266 cannot spare. A change is found by comparing fingerprints with
+  // what was last published, so a failed or redirected poll publishes nothing.
+  SonosTrack& t = g_track;
+
+  if (g_step == STEP_POSITION) {
+    g_step = STEP_IDLE;
+    bool redirect = false;
+    if (!readPosition(s, t, redirect)) {
+      if (redirect) {   // the room joined a group: find the new coordinator now
+        g_coord[0] = 0;
+        g_nextTopoMs = millis();
+      }
+      return;
+    }
+    g_error = false;
+    g_failStreak = 0;
+    g_stage = SONOS_OK;
+    if (t.state == SONOS_STOPPED && !t.title[0]) t.hasTrack = false;
+    // Radio has no per-track cover; the station's logo is in the media info,
+    // the same place the Sonos app takes it from. Read once per station.
+    if (t.radio && !t.artUrl[0]) {
+      if (t.uriHash != g_stationUri) g_step = STEP_STATION;
+      else applyStationArt(t);
+    }
+    publish();
+    return;
+  }
+
+  if (g_step == STEP_STATION) {
+    g_step = STEP_IDLE;
+    g_stationArt[0] = 0;
+    if (readStationArt(s)) g_stationUri = t.uriHash;   // asked again next track read if it failed
+    applyStationArt(t);
+    publish();
+    return;
+  }
+
+  if (!due(g_nextPollMs)) return;
   uint16_t every = s.sonos.pollSec;
   if (background && every < SONOS_BG_POLL_SEC) every = SONOS_BG_POLL_SEC;
   g_nextPollMs = millis() + (uint32_t)every * 1000UL;
 
   SonosPlay state;
   if (!readTransport(s, state)) return;
-
-  // Parsed straight into g_track: a second ~480-byte copy is heap the
-  // ESP8266 cannot spare. A change is found by comparing fingerprints with
-  // what was last published, so a failed or redirected poll publishes nothing.
-  SonosTrack& t = g_track;
   t.state = state;
-  bool redirect = false;
-  if (!readPosition(s, t, redirect)) {
-    if (redirect) {   // the room joined a group: find the new coordinator now
-      g_coord[0] = 0;
-      g_nextTopoMs = millis();
-    }
-    return;
-  }
-
-  // Radio has no per-track cover; the station's logo is in the media info,
-  // the same place the Sonos app takes it from.
-  if (t.radio && !t.artUrl[0]) {
-    if (t.uriHash != g_stationUri) {
-      g_stationArt[0] = 0;
-      if (readStationArt(s)) g_stationUri = t.uriHash;   // retried next poll if it failed
-    }
-    if (g_stationArt[0]) {
-      strlcpy(t.artUrl, g_stationArt, sizeof(t.artUrl));
-      t.artSource = SONOS_ART_STATION;
-      t.hasTrack = true;
-    }
-  }
-
-  g_error = false;
-  g_failStreak = 0;
-  g_stage = SONOS_OK;
   if (state == SONOS_PLAYING || state == SONOS_TRANSITIONING) g_lastPlayingMs = millis();
-  if (state == SONOS_STOPPED && !t.title[0]) t.hasTrack = false;
-
-  uint32_t key = sonosTrackKey(t) ^ ((uint32_t)t.state << 24) ^ (t.hasTrack ? 0x5A5A5A5Au : 0);
-  if (key != g_publishedKey) {
-    g_publishedKey = key;
-    g_version++;
+  // On screen every poll reads the track. Off screen the play state is what
+  // the carousel needs; the track follows every third poll (and at once
+  // when nothing is known yet), so the page comes up close to current.
+  if (!background || !t.hasTrack || ++g_bgPolls >= 3) {
+    g_bgPolls = 0;
+    g_step = STEP_POSITION;
   }
+  publish();
 }
 
 uint32_t sonosTrackKey(const SonosTrack& t) {

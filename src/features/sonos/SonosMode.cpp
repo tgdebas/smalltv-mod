@@ -137,6 +137,11 @@ void SonosMode::invalidate(const Settings& s) {
   shownKey_ = 0;
 }
 
+void SonosMode::wake(const Settings& s) {
+  needFull_ = true;
+  sonosForceRefresh();
+}
+
 const char* SonosMode::artStatus() const {
   return sonosArtResultName((ArtResult)artResult_);
 }

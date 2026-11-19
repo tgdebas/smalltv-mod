@@ -15,7 +15,9 @@ class SonosMode : public DisplayMode {
   void begin(const Settings& s) override;
   void service(const Settings& s) override;
   void invalidate(const Settings& s) override;
-  void wake(const Settings& s) override { needFull_ = true; }   // repaint from cache
+  // Repaint from cache, and read the speaker at once: off screen it is
+  // polled less often.
+  void wake(const Settings& s) override;
 
   // Outcome of the last album-art draw, for /api/status.
   const char* artStatus() const;

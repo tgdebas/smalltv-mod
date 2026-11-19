@@ -294,7 +294,7 @@
 #define DEFAULT_SONOS_POLL_SEC  3
 #define SONOS_PORT          1400
 #define SONOS_BG_POLL_SEC     10    // poll period while another carousel page shows
-#define SONOS_TOPOLOGY_MS   60000UL  // re-resolve the room's coordinator this often
+#define SONOS_TOPOLOGY_MS  600000UL  // re-read the zone layout this often (sooner on a failure or regroup)
 #define SONOS_ART_BOX         164    // album art fits in this square (px)
 #define SONOS_SOAP_TIMEOUT_MS 1500   // per speaker request (they answer on the LAN)
 
