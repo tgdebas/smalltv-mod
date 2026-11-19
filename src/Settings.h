@@ -226,6 +226,12 @@ struct Settings {
   String apPass;        // empty => open network
   String hostname;      // mDNS name => http://<hostname>.local
 
+  // --- Wi-Fi radio (ESP8266), applied at the next boot ---
+  // Lower transmit power or an older PHY mode can steady a board whose radio
+  // garbles what it sends at full power (no DHCP lease, lost replies).
+  uint8_t wifiTxQdBm;   // transmit power in quarter dBm, 0..82 (82 = 20.5 dBm, the SDK maximum)
+  uint8_t wifiPhy;      // WIFI_PHY_* below: 802.11n, g or b
+
   // --- Active feature ---
   String themeId;       // installed .stheme ID; empty until selected
   uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL / MODE_HA / MODE_SONOS / MODE_SYSMON

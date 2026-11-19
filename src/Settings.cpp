@@ -537,6 +537,8 @@ void Settings::setDefaults() {
   // Unique per device so several SmallTVs on one network don't collide on
   // mDNS out of the box. A hostname saved in config.json overrides this.
   hostname = String(DEFAULT_HOSTNAME) + "-" + String(platformChipId() & 0xFFFF, HEX);
+  wifiTxQdBm = (uint8_t)(WIFI_TX_DBM * 4 + 0.5f);
+  wifiPhy = WIFI_PHY_SET_N;
 
   mode = DEFAULT_MODE;
   themeId = "";
@@ -610,6 +612,8 @@ size_t settingsStoredSize() { return g_storedSize; }
 // ---------------------------------------------------------------------------
 void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   root["hostname"]   = s.hostname;
+  root["wifiTx"]     = s.wifiTxQdBm / 4.0f;
+  root["wifiPhy"]    = s.wifiPhy == WIFI_PHY_SET_B ? "b" : s.wifiPhy == WIFI_PHY_SET_G ? "g" : "n";
 
   // WiFi networks. Passwords only reach the config file, never the web API.
   JsonArray wf = root["wifi"].to<JsonArray>();
@@ -670,6 +674,16 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
 // the nested layout and the legacy flat layout (feature keys at the top level).
 void settingsApplyJson(Settings& s, JsonObjectConst root) {
   if (root["hostname"].is<const char*>()) s.hostname = root["hostname"].as<String>();
+  if (root["wifiTx"].is<float>() || root["wifiTx"].is<int>()) {
+    float dbm = root["wifiTx"].as<float>();
+    if (dbm < 0) dbm = 0;
+    if (dbm > 20.5f) dbm = 20.5f;
+    s.wifiTxQdBm = (uint8_t)(dbm * 4 + 0.5f);
+  }
+  if (root["wifiPhy"].is<const char*>()) {
+    String p = root["wifiPhy"].as<String>();
+    s.wifiPhy = p.equalsIgnoreCase("b") ? WIFI_PHY_SET_B : p.equalsIgnoreCase("g") ? WIFI_PHY_SET_G : WIFI_PHY_SET_N;
+  }
 
   if (root["wifi"].is<JsonArrayConst>()) {
     // The list is authoritative when present (order = try priority, missing

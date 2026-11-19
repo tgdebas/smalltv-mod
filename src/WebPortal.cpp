@@ -345,6 +345,10 @@ static String netFingerprint(const Settings& s) {
   }
   f += '\n';
   f += s.hostname;
+  f += '\n';
+  f += (int)s.wifiTxQdBm;   // radio settings apply at boot, like the networks
+  f += '/';
+  f += (int)s.wifiPhy;
   return f;
 }
 

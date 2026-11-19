@@ -112,7 +112,25 @@ static void testSonos() {
   CHECK(strcmp(doc2["mode"] | "", "sonos") == 0, "mode exported as sonos");
 }
 
+// The radio card: transmit power in quarter dBm, the PHY mode by letter.
+static void testRadio() {
+  Settings s;
+  s.setDefaults();
+  CHECK(s.wifiTxQdBm == 82 && s.wifiPhy == WIFI_PHY_SET_N, "defaults: 20.5 dBm, 802.11n");
+  apply(s, "{\"wifiTx\":14,\"wifiPhy\":\"g\"}");
+  CHECK(s.wifiTxQdBm == 56 && s.wifiPhy == WIFI_PHY_SET_G, "14 dBm, 802.11g: %u %u", s.wifiTxQdBm, s.wifiPhy);
+  apply(s, "{\"wifiTx\":99,\"wifiPhy\":\"x\"}");
+  CHECK(s.wifiTxQdBm == 82 && s.wifiPhy == WIFI_PHY_SET_N, "clamped, unknown mode -> n");
+  apply(s, "{\"wifiTx\":8.25}");
+  CHECK(s.wifiTxQdBm == 33, "quarter dBm kept: %u", s.wifiTxQdBm);
+  JsonDocument doc;
+  settingsToJson(s, doc.to<JsonObject>(), false);
+  CHECK(doc["wifiTx"].as<float>() > 8.2f && doc["wifiTx"].as<float>() < 8.3f, "exported");
+  CHECK(strcmp(doc["wifiPhy"] | "", "n") == 0, "mode exported");
+}
+
 int main() {
+  testRadio();
   testSonos();
   testNamesSetTheMode();
   testEmptyMode();

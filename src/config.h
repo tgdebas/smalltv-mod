@@ -288,6 +288,10 @@
 #ifndef WIFI_TX_DBM
 #define WIFI_TX_DBM 20.5f
 #endif
+// Settings::wifiPhy values.
+#define WIFI_PHY_SET_N 0
+#define WIFI_PHY_SET_G 1
+#define WIFI_PHY_SET_B 2
 
 #define MAX_SONOS_ROOM_LEN     48
 #define MAX_SONOS_HOST_LEN     40

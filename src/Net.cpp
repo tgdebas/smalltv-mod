@@ -100,6 +100,17 @@ static void recordFailure(const String& ssid) {
   Serial.println(buf);
 }
 
+#if !defined(SMALLTV_FAMILY_ESP32)
+// The PHY mode and transmit power from the settings (WiFi tab, Radio card);
+// the SDK defaults when there are none yet.
+static void applyRadio(const Settings* s) {
+  uint8_t phy = s ? s->wifiPhy : WIFI_PHY_SET_N;
+  WiFi.setPhyMode(phy == WIFI_PHY_SET_B ? WIFI_PHY_MODE_11B
+                : phy == WIFI_PHY_SET_G ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
+  WiFi.setOutputPower(s ? s->wifiTxQdBm / 4.0f : WIFI_TX_DBM);
+}
+#endif
+
 static void beginJoin(const WifiCred& n) {
   g_lastReason = 0;
   g_assoc = false;
@@ -110,8 +121,7 @@ static void beginJoin(const WifiCred& n) {
   // A SmallTV-ultra was refused by a FRITZ! mesh with reason 203 until this and
   // the boot scan in netBegin() went in together (not tested apart). Setting
   // the defaults changes nothing for a device that already uses them.
-  WiFi.setPhyMode(WIFI_PHY_MODE_11N);
-  WiFi.setOutputPower(WIFI_TX_DBM);
+  applyRadio(g_cfg);
 #endif
   WiFi.begin(n.ssid.c_str(), n.pass.c_str());
 }
@@ -129,8 +139,7 @@ static void startAP(const Settings& s) {
   // over the loader (no erase_flash), a SmallTV-ultra kept the stock firmware's
   // stored PHY mode and TX power: its SmallTV-Setup network showed up, but
   // clients got no DHCP lease and pings and HTTP replies were lost.
-  WiFi.setPhyMode(WIFI_PHY_MODE_11N);
-  WiFi.setOutputPower(WIFI_TX_DBM);
+  applyRadio(&s);
 #endif
   IPAddress apIP(192, 168, 4, 1);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
