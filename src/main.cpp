@@ -478,6 +478,24 @@ void setup() {
 static uint32_t g_loopLast = 0, g_loopMaxNow = 0, g_loopMaxPrev = 0, g_loopWindowStart = 0;
 uint32_t appLoopMaxMs() { return g_loopMaxNow > g_loopMaxPrev ? g_loopMaxNow : g_loopMaxPrev; }
 
+// Which step of loop() took longest, over the same window: each step below
+// is timed, and the slowest one's name is kept with its duration.
+static uint32_t    g_stepMaxNow = 0, g_stepMaxPrev = 0;
+static const char* g_stepNameNow = "";
+static const char* g_stepNamePrev = "";
+const char* appLoopSlowestStep() { return g_stepMaxNow >= g_stepMaxPrev ? g_stepNameNow : g_stepNamePrev; }
+uint32_t    appLoopSlowestStepMs() { return g_stepMaxNow >= g_stepMaxPrev ? g_stepMaxNow : g_stepMaxPrev; }
+struct StepTimer {
+  const char* name;
+  uint32_t t0;
+  explicit StepTimer(const char* n) : name(n), t0(millis()) {}
+  ~StepTimer() {
+    uint32_t d = millis() - t0;
+    if (d > g_stepMaxNow) { g_stepMaxNow = d; g_stepNameNow = name; }
+  }
+};
+#define TIMED(name, call) do { StepTimer _st(name); call; } while (0)
+
 void loop() {
   {
     uint32_t now = millis();
@@ -489,11 +507,15 @@ void loop() {
     if (now - g_loopWindowStart >= 60000UL) {
       g_loopMaxPrev = g_loopMaxNow;
       g_loopMaxNow = 0;
+      g_stepMaxPrev = g_stepMaxNow;
+      g_stepNamePrev = g_stepNameNow;
+      g_stepMaxNow = 0;
+      g_stepNameNow = "";
       g_loopWindowStart = now;
     }
   }
-  netLoop();
-  webPortalLoop();
+  TIMED("network", netLoop());
+  TIMED("web request", webPortalLoop());
 
 #ifdef BTN_PIN
   buttonService();
@@ -518,7 +540,7 @@ void loop() {
   // Before the safe-mode return on purpose: if the crash had nothing to do with
   // the tunnel, remote access survives it, and if it did, the three-strikes hold
   // stops the retries by itself.
-  wgService(g_settings);
+  TIMED("wireguard", wgService(g_settings));
 
   if (g_safeMode) {
     delay(5);
@@ -529,7 +551,7 @@ void loop() {
   // After the safe-mode return on purpose: a fault in here (e.g. a malformed
   // retained screen that re-arrives on every connect) must not boot-loop the
   // device past its own recovery page. Self-gates on WiFi STA + broker config.
-  mqttLoop();
+  TIMED("mqtt", mqttLoop());
 #endif
 
   if (netMode() == NET_AP) {
@@ -555,7 +577,7 @@ void loop() {
 
   // Night-mode state machine (NTP-trust gate), then apply the effective brightness
   // (night override / auto-brightness / manual level).
-  clockService(g_settings);
+  TIMED("clock", clockService(g_settings));
   appApplyBrightness();
 
   // On expiry the carousel dwell is credited back the time it was hidden, so it
@@ -598,11 +620,11 @@ void loop() {
   // In the carousel, keep reading the Sonos state while other pages show, so
   // Now Playing can join the rotation when music starts.
   if (g_settings.mode == MODE_CAROUSEL && g_settings.carouselSonos && m != &g_sonosMode)
-    sonosService(g_settings, true);
+    TIMED("sonos (background)", sonosService(g_settings, true));
 #endif
   if (m) {
     if (restore) m->wake(g_settings);
-    m->service(g_settings);
+    TIMED(m->id(), m->service(g_settings));
   }
 
   delay(5);

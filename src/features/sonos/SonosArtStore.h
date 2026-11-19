@@ -6,11 +6,12 @@
 //    a cover the cube could not fetch itself (https, PNG, short heap). <key> is
 //    artKeyOf(url). Only the newest is kept, so a station's logo stays until a
 //    different cover replaces it.
-// Files are baseline JPEG, at most ART_STORE_MAX_BYTES.
+// Files are baseline JPEG, or R565 (see SonosBmp.h) converted from a BMP
+// upload, at most ART_STORE_MAX_BYTES.
 #pragma once
 #include <Arduino.h>
 
-#define ART_STORE_MAX_BYTES 49152
+#define ART_STORE_MAX_BYTES 54000   // a 164x164 R565 cover is 53,800 bytes
 
 uint32_t artKeyOf(const char* url);               // FNV-1a, never 0
 void     artStationPath(uint32_t uriHash, char* out, size_t n);

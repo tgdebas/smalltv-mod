@@ -6,6 +6,7 @@
 #include <new>
 #include "tjpgd.h"
 #include <LittleFS.h>
+#include "SonosBmp.h"
 
 // TJpgDec's documented minimum for JD_FASTDECODE 1 is 3500 bytes, but the
 // tables it builds grow with the image (four quantisation tables alone take
@@ -262,10 +263,41 @@ static void describeJpeg(File& f, int& n) {
   n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %s %s", sof[0] ? sof : "no SOF", tables);
 }
 
+// R565 (SonosBmp.h): rows straight to the panel, no decoder and no work area.
+static ArtResult drawR565(File& f, int x, int y, int box, int& n) {
+  uint8_t h[R565_HEADER];
+  f.seek(0, SeekSet);
+  if (f.read(h, sizeof(h)) != (int)sizeof(h)) return ART_DECODE_ERROR;
+  uint16_t w = (uint16_t)(h[4] | h[5] << 8), ht = (uint16_t)(h[6] | h[7] << 8);
+  bool bottomUp = h[2] & 1;
+  if (!w || !ht || w > box || ht > box || f.size() < (size_t)R565_HEADER + 2u * w * ht) {
+    n += snprintf(g_detail + n, sizeof(g_detail) - n, ", bad R565 %ux%u", w, ht);
+    return ART_DECODE_ERROR;
+  }
+  int x0 = x + (box - w) / 2, y0 = y + (box - ht) / 2;
+  uint16_t row[SONOS_BMP_MAX];
+  for (uint16_t r = 0; r < ht; r++) {
+    if (f.read((uint8_t*)row, 2u * w) != (int)(2u * w)) return ART_DECODE_ERROR;
+    for (uint16_t i = 0; i < w; i++) row[i] = gfxTint(row[i]);
+    gfxDev()->draw16bitRGBBitmap(x0, y0 + (bottomUp ? ht - 1 - r : r), row, w, 1);
+    if ((r & 15) == 15) yield();
+  }
+  n += snprintf(g_detail + n, sizeof(g_detail) - n, ", %ux%u, drawn", w, ht);
+  return ART_OK;
+}
+
 ArtResult sonosDrawArtFile(const char* path, int x, int y, int box, const char* label) {
   File f = LittleFS.open(path, "r");
   if (!f) return ART_NO_URL;
   int n = snprintf(g_detail, sizeof(g_detail), "%s, %u B", label, (unsigned)f.size());
+  uint8_t magic[2] = {0, 0};
+  f.read(magic, 2);
+  if (magic[0] == 'R' && magic[1] == '5') {
+    ArtResult r = drawR565(f, x, y, box, n);
+    f.close();
+    return r;
+  }
+  f.seek(0, SeekSet);
   ArtSession s;
   s.file = &f;
   s.left = f.size();

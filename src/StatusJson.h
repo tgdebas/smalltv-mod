@@ -249,9 +249,12 @@ template <class Out> void writeStatusSysmon(Out& out, const StatusSysmon& r) {
 }
 
 // The longest gap between two main-loop passes in the last minute or two.
-template <class Out> void writeStatusLoop(Out& out, uint32_t maxMs) {
+template <class Out> void writeStatusLoop(Out& out, uint32_t maxMs, const char* slowStep,
+                                          uint32_t slowStepMs) {
   using statusout::member;
   member(out, PSTR(",\"loop\":{\"maxMs\":"), maxMs);
+  member(out, PSTR(",\"slowStep\":"), slowStep);
+  member(out, PSTR(",\"slowStepMs\":"), slowStepMs);
   jsonout::raw(out, PSTR("}"));
 }
 

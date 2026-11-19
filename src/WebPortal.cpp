@@ -44,6 +44,8 @@ extern void appInvalidate();
 extern void appRelease();
 extern const char* appResetReason();   // last reset reason (diagnostics)
 extern uint32_t appLoopMaxMs();        // longest loop pause, last 1-2 min
+extern const char* appLoopSlowestStep();
+extern uint32_t appLoopSlowestStepMs();
 extern void appApplyBrightness();   // main.cpp: re-resolve effective brightness now
 extern int  appBacklightSteps();    // main.cpp: backlight level now, 0..255
 
@@ -325,7 +327,7 @@ static void handleStatus() {
     smalltv::writeStatusSysmon(out, sm);
   }
 #endif
-  smalltv::writeStatusLoop(out, appLoopMaxMs());
+  smalltv::writeStatusLoop(out, appLoopMaxMs(), appLoopSlowestStep(), appLoopSlowestStepMs());
   smalltv::writeStatusEnd(out);
   server.sendContent("", 0);   // the last chunk
 }

@@ -194,6 +194,7 @@ void SonosMode::renderArt(const Settings& s) {
     if (r != ART_OK && relayed) {
       r = sonosDrawArtFile(path, ART_X, ART_Y, ART, "from Mac");
       if (r == ART_OK) artVia_ = ART_VIA_MAC;
+      else artStoreRemove(path);   // unreadable: drop it, so the Mac is asked again
     }
     if (r != ART_OK) wantedKey_ = key;
   }

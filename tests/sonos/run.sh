@@ -16,3 +16,8 @@ JSON_INCLUDE=${THEME_JSON_INCLUDE:-.pio/libdeps/smalltv_esp32_8mb/ArduinoJson/sr
 c++ -std=c++11 -Wall -Wextra -Werror -g -Isrc -I"$JSON_INCLUDE" \
   tests/sonos/test_status_sonos.cpp -o "$OUT-status"
 "$OUT-status"
+
+# The BMP -> R565 converter for covers the Mac relays.
+c++ -std=c++11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -Isrc/features/sonos \
+  tests/sonos/test_bmp.cpp src/features/sonos/SonosBmp.cpp -o "$OUT-bmp"
+"$OUT-bmp"

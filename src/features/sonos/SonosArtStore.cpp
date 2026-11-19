@@ -1,6 +1,9 @@
 #include "SonosArtStore.h"
 #include "Platform.h"
 #include <LittleFS.h>
+#include <memory>
+#include <new>
+#include "SonosBmp.h"
 
 static const char kDir[] = "/art";
 static const char kTmp[] = "/art/.up";
@@ -12,6 +15,16 @@ static size_t   g_upBytes = 0;
 static uint8_t  g_upHead[2];
 static char     g_upPath[32];
 static uint32_t g_relaySeq = 0;
+// A BMP upload is converted to R565 as it streams in (see SonosBmp.h).
+static std::unique_ptr<BmpTo565> g_bmp;
+static size_t   g_upIn = 0;               // bytes received (a BMP is larger than what is stored)
+static const size_t kMaxBmpIn = 200000;   // 164x164 at 32 bpp plus any header
+
+static bool writeStored(void*, const uint8_t* d, size_t n) {
+  if (g_upBytes + n > ART_STORE_MAX_BYTES || g_up.write(d, n) != n) return false;
+  g_upBytes += n;
+  return true;
+}
 
 uint32_t artRelaySeq() { return g_relaySeq; }
 
@@ -74,22 +87,34 @@ bool artUploadBegin(const char* finalPath, bool relay) {
   g_upOk = (bool)g_up;
   g_upRelay = relay;
   g_upBytes = 0;
+  g_upIn = 0;
+  g_bmp.reset();
   strlcpy(g_upPath, finalPath, sizeof(g_upPath));
   return g_upOk;
 }
 
 void artUploadWrite(const uint8_t* data, size_t len) {
-  if (!g_upOk) return;
-  for (size_t i = 0; i < len && g_upBytes + i < 2; i++) g_upHead[g_upBytes + i] = data[i];
-  if (g_upBytes + len > ART_STORE_MAX_BYTES || g_up.write(data, len) != len) {
-    g_upOk = false;   // too big, or the filesystem is full
+  if (!g_upOk || !len) return;
+  for (size_t i = 0; i < len && g_upIn + i < 2; i++) g_upHead[g_upIn + i] = data[i];
+  // The format shows in the first two bytes ("BM", or FF D8 for a JPEG); an
+  // upload's first piece is far longer than that.
+  if (g_upIn == 0 && len >= 2 && data[0] == 'B' && data[1] == 'M') {
+    // Black art background (SonosMode's C_ART_BG) under transparent pixels.
+    g_bmp.reset(new (std::nothrow) BmpTo565(writeStored, nullptr, 0x18E3));
+    if (!g_bmp) { g_upOk = false; return; }
+  }
+  g_upIn += len;
+  if (g_bmp) {
+    if (g_upIn > kMaxBmpIn || !g_bmp->feed(data, len)) g_upOk = false;
     return;
   }
-  g_upBytes += len;
+  if (!writeStored(nullptr, data, len)) g_upOk = false;   // too big, or the filesystem is full
 }
 
 bool artUploadEnd() {
-  bool ok = g_upOk && g_upBytes >= 4 && g_upHead[0] == 0xFF && g_upHead[1] == 0xD8;   // JPEG SOI
+  bool ok = g_upOk && (g_bmp ? g_bmp->finished()
+                             : g_upBytes >= 4 && g_upHead[0] == 0xFF && g_upHead[1] == 0xD8);   // JPEG SOI
+  g_bmp.reset();
   if (g_up) g_up.close();
   g_upOk = false;
   if (!ok) { LittleFS.remove(kTmp); return false; }
@@ -105,4 +130,5 @@ bool artUploadEnd() {
 void artUploadAbort() {
   if (g_up) { g_up.close(); LittleFS.remove(kTmp); }
   g_upOk = false;
+  g_bmp.reset();
 }

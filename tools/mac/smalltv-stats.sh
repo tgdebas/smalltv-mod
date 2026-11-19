@@ -17,7 +17,9 @@
 # Covers: when the SmallTV shows Sonos Now Playing but cannot fetch the cover
 # itself (an https-only image, a PNG, or not enough memory), its reply names
 # the image. The script then downloads it, shrinks it to 160 px and converts it
-# to JPEG with sips (built into macOS), and sends it to http://HOST/api/sonos/art.
+# to BMP with sips (built into macOS), and sends it to http://HOST/api/sonos/art.
+# BMP, not JPEG: sips keeps a progressive source progressive, which the
+# device's JPEG decoder cannot read; it converts a BMP itself as it arrives.
 # Each cover is fetched once. Set SMALLTV_STATS_COVERS=0 to turn this off.
 
 set -u
@@ -112,13 +114,13 @@ send() {   # HOST CPU MEM DISK RX TX
 reply_art() { sed -n 's/.*"art"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's|\\/|/|g'; }
 reply_key() { sed -n 's/.*"key"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{8\}\)".*/\1/p'; }
 
-# Download a cover, make it a small baseline JPEG, send it to the device.
+# Download a cover, make it a 160 px BMP, send it to the device.
 relay_cover() {   # HOST URL KEY
   local tmp rc=1
   tmp=$(mktemp -d) || return 1
   if curl -fsSL -m 15 -o "$tmp/in" "$2" &&
-     sips -s format jpeg -s formatOptions 85 -Z 160 "$tmp/in" --out "$tmp/out.jpg" >/dev/null 2>&1 &&
-     curl -fsS -m 10 -o /dev/null -F "file=@$tmp/out.jpg;type=image/jpeg" \
+     sips -s format bmp -Z 160 "$tmp/in" --out "$tmp/out.bmp" >/dev/null 2>&1 &&
+     curl -fsS -m 20 -o /dev/null -F "file=@$tmp/out.bmp;type=image/bmp" \
        "http://$1/api/sonos/art?key=$3"; then
     rc=0
   fi
@@ -128,7 +130,7 @@ relay_cover() {   # HOST URL KEY
 
 run_loop() {
   local host=$1 prev_in="" prev_out="" prev_t="" warned=0
-  local cover_done="" cover_failed="" cover_failed_at=0 covers=${SMALLTV_STATS_COVERS:-1}
+  local cover_sent="" cover_sent_at=0 covers=${SMALLTV_STATS_COVERS:-1}
   echo "Sending this Mac's stats to $host every ${INTERVAL}s (Ctrl+C stops)."
   while :; do
     local cpu mem disk rx=0 tx=0 bytes now
@@ -149,14 +151,14 @@ run_loop() {
       warned=0
       local key url
       key=$(printf '%s' "$reply" | reply_key)
-      if [ "$covers" = 1 ] && [ -n "$key" ] && [ "$key" != "$cover_done" ] &&
-         { [ "$key" != "$cover_failed" ] || [ $((now - cover_failed_at)) -ge 60 ]; }; then
+      # The device asks only while it lacks the cover: a new one is sent at
+      # once, the same one again (it could not use the copy) once a minute.
+      if [ "$covers" = 1 ] && [ -n "$key" ] &&
+         { [ "$key" != "$cover_sent" ] || [ $((now - cover_sent_at)) -ge 60 ]; }; then
         url=$(printf '%s' "$reply" | reply_art)
-        if [ -n "$url" ] && relay_cover "$host" "$url" "$key"; then
-          cover_done=$key
-        else
+        cover_sent=$key cover_sent_at=$now
+        if [ -z "$url" ] || ! relay_cover "$host" "$url" "$key"; then
           echo "$(date '+%F %T') could not relay cover $url" >&2
-          cover_failed=$key cover_failed_at=$now
         fi
       fi
     elif [ $warned -eq 0 ]; then

@@ -944,7 +944,7 @@ function showStatus(s){
   (s.lastCrash?kv('Last crash',crashLine(s.lastCrash)+' <a href="#" onclick="clearCrash();return false">clear</a>'):'')+
   ((s.wg&&s.wg.compiledIn)?kv('VPN',s.wg.held?'held':(s.wg.up?'up':(s.wg.enabled?'connecting':'off'))):'')+
   (s.radar?kv('Radar',radarLine(s.radar)):'')+
-  (s.loop?kv('Longest pause',s.loop.maxMs+' ms <span class="muted">(last 1-2 min; over ~200 ms shows as stutter)</span>'):'')+
+  (s.loop?kv('Longest pause',s.loop.maxMs+' ms'+(s.loop.slowStep?' (slowest step: '+esc(s.loop.slowStep)+', '+s.loop.slowStepMs+' ms)':'')+' <span class="muted">(last 1-2 min; over ~200 ms shows as stutter)</span>'):'')+
   (s.sonos?kv('Sonos',esc(sonosLine(s.sonos))):'')+
   (s.sysmon?kv('Mac stats',esc(sysmonLine(s.sysmon))):'');
  sonosShow(s.sonos);
