@@ -53,30 +53,25 @@
 #endif
 
 #if defined(SMALLTV_FAMILY_ESP8266)
-// Full RF calibration at every power-up, instead of the core's default (byte
-// 114 of the PHY init data = 1: calibrate TX power only, take the rest from
-// the RF calibration sector in flash). An install over the stock OTA (the
-// SmallTV-ultra loader path) never erases that sector, and whatever the
-// stock firmware left there then stands in for calibration data: a
-// SmallTV-ultra so installed showed its hotspot but dropped most frames, so
-// clients got no DHCP lease and it could not get one from the router either,
-// with the right password. Costs about 200 ms at boot and some extra current
-// during it; does not depend on what is in flash.
+// RF calibration: like the GeekMagic stock firmware, the stored calibration
+// is reused at every boot (the core's default: TX power is calibrated, the
+// rest is read from the RF calibration sector). When that sector is blank the
+// SDK runs a full calibration and stores the result. A SmallTV-ultra got a bad
+// result at random from boot to boot ("no IP": the radio garbles what it
+// sends); a full calibration on every boot (b318005) only re-rolled the dice
+// each time. Now a boot whose join gets no DHCP lease erases the sector and
+// restarts (Net.cpp), so a fresh calibration is tried until one works, and a
+// working one is kept.
 //
-// The backlight goes off first, before that calibration. After a software
-// restart (an update, the Reboot button, the setup-mode retry) the backlight
-// pin is not driven yet and the panel can be lit while the radio calibrates;
-// from a cold power-up it starts dark. On a SmallTV-ultra a software restart
-// never cleared "no IP", while a power cycle sometimes did. gfxBegin() turns
-// the backlight on again a moment later. Plain register writes: this runs
-// before the Arduino core is set up.
+// The backlight goes off before the radio starts, in case a lit panel on the
+// supply disturbs that calibration; gfxBegin() lights it again a moment
+// later. Plain register writes: this runs before the Arduino core is set up.
 RF_PRE_INIT() {
 #if defined(TFT_BL)
   GPES = (1u << TFT_BL);                                  // drive the pin
   if (TFT_BL_DEFAULT_INVERTED) GPOS = (1u << TFT_BL);     // active-low: high is off
   else                         GPOC = (1u << TFT_BL);
 #endif
-  system_phy_set_powerup_option(3);
 }
 #endif
 

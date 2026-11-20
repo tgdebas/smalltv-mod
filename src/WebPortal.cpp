@@ -328,6 +328,7 @@ static void handleStatus() {
   }
 #endif
   smalltv::writeStatusLoop(out, appLoopMaxMs(), appLoopSlowestStep(), appLoopSlowestStepMs());
+  smalltv::writeStatusRf(out, netRadioRecalCount());
   smalltv::writeStatusEnd(out);
   server.sendContent("", 0);   // the last chunk
 }
@@ -509,6 +510,15 @@ static void handlePixelRefresh() {
   char out[48];
   snprintf(out, sizeof(out), "{\"ok\":true,\"remaining\":%lu}", (unsigned long)pixelRefreshRemainingSec());
   server.send(200, "application/json", out);
+}
+
+// A fresh RF calibration at the next boot (ESP8266), then that boot: the
+// WiFi tab's Recalibrate radio button. See RF_PRE_INIT in main.cpp.
+static void handleRadioRecal() {
+  if (!requireAuth()) return;
+  netRecalibrateRadio();
+  server.send(200, "application/json", "{\"ok\":true,\"reboot\":true}");
+  scheduleReboot(1200);
 }
 
 static void handleRefresh() {
@@ -879,6 +889,7 @@ void webPortalBegin(Settings& settings) {
   server.on("/api/factory", HTTP_POST, handleFactory);
   server.on("/api/crash/clear", HTTP_POST, handleCrashClear);
   server.on("/api/refresh", HTTP_POST, handleRefresh);
+  server.on("/api/radio/recal", HTTP_POST, handleRadioRecal);
   server.on("/api/pixelrefresh", HTTP_POST, handlePixelRefresh);
   server.on("/api/export", HTTP_GET, handleExport);
   server.on("/api/import", HTTP_POST, handleImport);

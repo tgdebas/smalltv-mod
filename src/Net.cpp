@@ -24,7 +24,50 @@ static volatile bool     g_assoc = false;   // associated, maybe still waiting f
 // failing, while a restart often joins. See the restart in netLoop().
 static bool        g_lastFailNoIp = false;
 static uint32_t    g_apSince = 0;           // millis() setup mode started
-static const uint32_t kNoIpRestartMs = 180000;   // setup mode this long after "no IP" -> restart
+static uint32_t    g_rfTriesAtJoin = 0;     // calibrations tried before this boot's join
+static const uint32_t kNoIpRestartMs = 45000;    // setup mode this long after "no IP" -> new calibration + restart
+static const uint32_t kNoIpRestartSlowMs = 900000;   // after kNoIpQuickTries in a row: every 15 minutes
+static const uint32_t kNoIpQuickTries = 12;
+
+#if !defined(SMALLTV_FAMILY_ESP32)
+// ---- RF calibration re-roll (see RF_PRE_INIT in main.cpp) -------------------
+// The count of calibrations tried in a row lives in RTC memory: it survives
+// the restarts, not a power cycle, and a successful join clears it. Word 88
+// is clear of the crash record (words 96..107, Platform.cpp).
+static const uint32_t RF_RTC_WORD = 88;
+static const uint32_t RF_RTC_MAGIC = 0x52465243;   // "CRFR"
+struct RfRecalRtc { uint32_t magic; uint32_t count; };
+
+static uint32_t rfRecalCount() {
+  RfRecalRtc r;
+  if (!ESP.rtcUserMemoryRead(RF_RTC_WORD, reinterpret_cast<uint32_t*>(&r), sizeof(r))) return 0;
+  return r.magic == RF_RTC_MAGIC ? r.count : 0;
+}
+static void rfRecalSetCount(uint32_t n) {
+  RfRecalRtc r = {RF_RTC_MAGIC, n};
+  ESP.rtcUserMemoryWrite(RF_RTC_WORD, reinterpret_cast<uint32_t*>(&r), sizeof(r));
+}
+// The sector the core asks the SDK to keep the calibration in (core 3.1.2,
+// NONOS SDK 2.2.x: user_rf_cal_sector_set(), 4 sectors from the end).
+// Blank, it makes the next boot calibrate afresh.
+static bool rfCalErase() {
+  return ESP.flashEraseSector(ESP.getFlashChipSize() / SPI_FLASH_SEC_SIZE - 4);
+}
+#endif
+
+uint32_t netRadioRecalCount() {
+#if !defined(SMALLTV_FAMILY_ESP32)
+  return g_mode == NET_STA ? g_rfTriesAtJoin : rfRecalCount();
+#else
+  return 0;
+#endif
+}
+
+void netRecalibrateRadio() {
+#if !defined(SMALLTV_FAMILY_ESP32)
+  rfCalErase();
+#endif
+}
 static String      g_failText;
 static uint16_t    g_failSeq = 0;           // bumped on every new failure text
 
@@ -237,6 +280,10 @@ void netBegin(const Settings& s, void (*onProgress)(const char*)) {
       g_failText = "";
       g_curNet = (int8_t)order[k];
       g_mode = NET_STA;
+#if !defined(SMALLTV_FAMILY_ESP32)
+      g_rfTriesAtJoin = rfRecalCount();   // how many calibrations this good one took
+      if (g_rfTriesAtJoin) rfRecalSetCount(0);   // this calibration works: keep it
+#endif
       if (MDNS.begin(g_hostname.c_str())) {
         MDNS.addService("http", "tcp", 80);
 #if WITH_USAGE
@@ -275,10 +322,26 @@ void netLoop() {
     // the setup hotspot (they may be fixing the settings), never mid-attempt,
     // and not for a wrong password or a missing network, which a restart
     // cannot fix. Safe mode never gets here (g_retryAllowed is false).
-    if (g_lastFailNoIp && !busy && !g_attemptStart && millis() - g_apSince > kNoIpRestartMs) {
-      Serial.println(F("[net] no DHCP lease in setup mode, restarting to retry"));
-      delay(100);
-      ESP.restart();
+    if (g_lastFailNoIp && !busy && !g_attemptStart) {
+#if !defined(SMALLTV_FAMILY_ESP32)
+      uint32_t tries = rfRecalCount();
+      uint32_t wait = tries < kNoIpQuickTries ? kNoIpRestartMs : kNoIpRestartSlowMs;
+#else
+      uint32_t wait = kNoIpRestartMs;
+#endif
+      if (millis() - g_apSince > wait) {
+#if !defined(SMALLTV_FAMILY_ESP32)
+        // The radio is what failed: try a fresh calibration (the sector
+        // erase makes the next boot run one), counting the tries.
+        Serial.println(F("[net] no DHCP lease: new RF calibration, restarting"));
+        rfCalErase();
+        rfRecalSetCount(tries + 1);
+#else
+        Serial.println(F("[net] no DHCP lease in setup mode, restarting to retry"));
+#endif
+        delay(100);
+        ESP.restart();
+      }
     }
     if (g_attemptStart) {
       if (WiFi.status() == WL_CONNECTED) {

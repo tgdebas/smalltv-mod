@@ -89,7 +89,8 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
      <select id="wifiPhy"><option value="n">802.11n (default)</option><option value="g">802.11g</option>
       <option value="b">802.11b (slowest, most robust)</option></select></div>
    </div>
-   <small class="hint">If the device often joins with <b>no IP (DHCP)</b>, or loses replies once connected, its radio may be garbling what it sends at full power. Try 14 dBm first, then 802.11g. Lower power shortens the range a little. Saved with the networks above; the device restarts to apply them.</small>
+   <small class="hint">If the device often joins with <b>no IP (DHCP)</b>, or loses replies once connected, its radio may be garbling what it sends. The device keeps the radio's calibration from the last start that worked; after a <b>no IP</b> it tries a fresh one by itself, restarting about a minute later. Lower power and 802.11g are further things to try. Saved with the networks above; the device restarts to apply them.</small>
+   <button class="btn sec" style="margin-top:8px" onclick="radioRecal()">Recalibrate radio (restarts)</button>
   </div>
   <div class="card"><h2>Device name</h2>
    <label>Hostname</label><input id="hostname" type="text" placeholder="smalltv">
@@ -960,6 +961,7 @@ function showStatus(s){
   (s.lastCrash?kv('Last crash',crashLine(s.lastCrash)+' <a href="#" onclick="clearCrash();return false">clear</a>'):'')+
   ((s.wg&&s.wg.compiledIn)?kv('VPN',s.wg.held?'held':(s.wg.up?'up':(s.wg.enabled?'connecting':'off'))):'')+
   (s.radar?kv('Radar',radarLine(s.radar)):'')+
+  (s.rf&&s.rf.recal?kv('Radio calibration','this start took '+(s.rf.recal+1)+' tries'):'')+
   (s.loop?kv('Longest pause',s.loop.maxMs+' ms'+(s.loop.slowStep?' (slowest step: '+esc(s.loop.slowStep)+', '+s.loop.slowStepMs+' ms)':'')+' <span class="muted">(last 1-2 min; over ~200 ms shows as stutter)</span>'):'')+
   (s.sonos?kv('Sonos',esc(sonosLine(s.sonos))):'')+
   (s.sysmon?kv('Mac stats',esc(sysmonLine(s.sysmon))):'');
@@ -1059,6 +1061,8 @@ function wgLine(w){
 function fmtUp(s){var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
  return (d?d+'d ':'')+(h?h+'h ':'')+m+'m'}
 function pixelRefresh(m){j('/api/pixelrefresh?minutes='+m,{method:'POST'}).then(function(d){toast(m?('Screen refresh running for '+Math.round(d.remaining/60)+' min'):'Screen refresh stopped')}).catch(function(e){toast(e.message)})}
+function radioRecal(){if(!confirm('Calibrate the radio afresh? The device restarts.'))return;
+ j('/api/radio/recal',{method:'POST'}).then(function(){toast('Restarting with a fresh radio calibration...')}).catch(function(e){toast(e.message)})}
 function refreshNow(){j('/api/refresh',{method:'POST'}).then(function(){toast('Refreshing...');setTimeout(loadStatus,1500)})}
 
 // HA screens purge: wipes the device store and the broker's retained copies.

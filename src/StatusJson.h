@@ -258,6 +258,13 @@ template <class Out> void writeStatusLoop(Out& out, uint32_t maxMs, const char* 
   jsonout::raw(out, PSTR("}"));
 }
 
+// RF calibration (ESP8266): how many fresh calibrations this boot took.
+template <class Out> void writeStatusRf(Out& out, uint32_t recal) {
+  using statusout::member;
+  member(out, PSTR(",\"rf\":{\"recal\":"), recal);
+  jsonout::raw(out, PSTR("}"));
+}
+
 // Closes the object and sends the last piece.
 template <class Out> void writeStatusEnd(Out& out) {
   jsonout::raw(out, PSTR("}"));

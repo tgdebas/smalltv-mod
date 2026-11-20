@@ -26,3 +26,9 @@ void        netAllowRetry(bool on);
 // Last failed join, e.g. "Home: wrong password? (15)"; empty once joined.
 const char* netFailReason();
 uint16_t    netFailSeq();     // changes whenever netFailReason() does
+
+// RF calibration (ESP8266): how many fresh calibrations this boot took (in
+// station mode) or have been tried so far (in setup mode); and a request for
+// a fresh one at the next boot (the WiFi tab's Recalibrate radio button).
+uint32_t netRadioRecalCount();
+void     netRecalibrateRadio();
