@@ -539,6 +539,9 @@ void Settings::setDefaults() {
   hostname = String(DEFAULT_HOSTNAME) + "-" + String(platformChipId() & 0xFFFF, HEX);
   wifiTxQdBm = (uint8_t)(WIFI_TX_DBM * 4 + 0.5f);
   wifiPhy = WIFI_PHY_SET_N;
+  ipMode = IP_MODE_DHCP;
+  for (int i = 0; i < 4; i++) ip[i] = gw[i] = dns[i] = 0;
+  mask[0] = mask[1] = mask[2] = 255; mask[3] = 0;
 
   mode = DEFAULT_MODE;
   themeId = "";
@@ -610,10 +613,38 @@ void factoryReset(Settings& s) {
 size_t settingsStoredSize() { return g_storedSize; }
 
 // ---------------------------------------------------------------------------
+// Dotted IPv4 text <-> 4 bytes. Strict: four numbers 0..255, nothing else.
+static bool parseIp(const char* t, uint8_t out[4]) {
+  uint8_t v[4];
+  for (int i = 0; i < 4; i++) {
+    if (*t < '0' || *t > '9') return false;
+    int n = 0, digits = 0;
+    while (*t >= '0' && *t <= '9') {
+      n = n * 10 + (*t++ - '0');
+      if (++digits > 3 || n > 255) return false;
+    }
+    v[i] = (uint8_t)n;
+    if (i < 3 && *t++ != '.') return false;
+  }
+  if (*t) return false;
+  for (int i = 0; i < 4; i++) out[i] = v[i];
+  return true;
+}
+static String ipText(const uint8_t b[4]) {
+  char t[16];
+  snprintf(t, sizeof(t), "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
+  return String(t);
+}
+
 void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   root["hostname"]   = s.hostname;
   root["wifiTx"]     = s.wifiTxQdBm / 4.0f;
   root["wifiPhy"]    = s.wifiPhy == WIFI_PHY_SET_B ? "b" : s.wifiPhy == WIFI_PHY_SET_G ? "g" : "n";
+  root["ipMode"]     = s.ipMode == IP_MODE_STATIC ? "static" : s.ipMode == IP_MODE_FALLBACK ? "fallback" : "dhcp";
+  root["ip"]         = ipText(s.ip);
+  root["mask"]       = ipText(s.mask);
+  root["gw"]         = ipText(s.gw);
+  root["dns"]        = ipText(s.dns);
 
   // WiFi networks. Passwords only reach the config file, never the web API.
   JsonArray wf = root["wifi"].to<JsonArray>();
@@ -679,6 +710,20 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
     if (dbm < 0) dbm = 0;
     if (dbm > 20.5f) dbm = 20.5f;
     s.wifiTxQdBm = (uint8_t)(dbm * 4 + 0.5f);
+  }
+  if (root["ipMode"].is<const char*>()) {
+    String m = root["ipMode"].as<String>();
+    s.ipMode = m.equalsIgnoreCase("static") ? IP_MODE_STATIC
+             : m.equalsIgnoreCase("fallback") ? IP_MODE_FALLBACK : IP_MODE_DHCP;
+  }
+  // An address that does not parse keeps the stored one; empty DNS = the gateway.
+  if (root["ip"].is<const char*>())   parseIp(root["ip"].as<const char*>(), s.ip);
+  if (root["mask"].is<const char*>()) parseIp(root["mask"].as<const char*>(), s.mask);
+  if (root["gw"].is<const char*>())   parseIp(root["gw"].as<const char*>(), s.gw);
+  if (root["dns"].is<const char*>()) {
+    const char* d = root["dns"].as<const char*>();
+    if (!*d) { for (int i = 0; i < 4; i++) s.dns[i] = 0; }
+    else parseIp(d, s.dns);
   }
   if (root["wifiPhy"].is<const char*>()) {
     String p = root["wifiPhy"].as<String>();

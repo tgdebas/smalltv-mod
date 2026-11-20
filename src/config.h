@@ -291,6 +291,11 @@
 #ifndef WIFI_TX_DBM
 #define WIFI_TX_DBM 19.5f
 #endif
+// Settings::ipMode values: how the device gets its address on the saved network.
+#define IP_MODE_DHCP      0   // from the router (the default)
+#define IP_MODE_FALLBACK  1   // from the router; the fixed one when no lease comes
+#define IP_MODE_STATIC    2   // always the fixed one
+#define DHCP_FALLBACK_MS  15000UL   // associated this long without a lease -> the fixed address
 // Settings::wifiPhy values.
 #define WIFI_PHY_SET_N 0
 #define WIFI_PHY_SET_G 1

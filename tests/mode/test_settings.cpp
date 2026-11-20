@@ -129,7 +129,32 @@ static void testRadio() {
   CHECK(strcmp(doc["wifiPhy"] | "", "n") == 0, "mode exported");
 }
 
+// The Address card: mode by name, strict dotted addresses, empty DNS = gateway.
+static void testAddress() {
+  Settings s;
+  s.setDefaults();
+  CHECK(s.ipMode == IP_MODE_DHCP && s.mask[0] == 255 && s.mask[3] == 0, "defaults: DHCP, /24 mask");
+  apply(s, "{\"ipMode\":\"fallback\",\"ip\":\"192.168.1.50\",\"gw\":\"192.168.1.1\",\"dns\":\"\"}");
+  CHECK(s.ipMode == IP_MODE_FALLBACK, "fallback mode");
+  CHECK(s.ip[0] == 192 && s.ip[3] == 50 && s.gw[3] == 1, "addresses parsed");
+  CHECK(s.dns[0] == 0 && s.dns[3] == 0, "empty DNS = gateway");
+  apply(s, "{\"ip\":\"192.168.1.256\"}");
+  CHECK(s.ip[3] == 50, "300-style octet refused, stored kept");
+  apply(s, "{\"ip\":\"192.168.1\"}");
+  CHECK(s.ip[3] == 50, "three parts refused");
+  apply(s, "{\"ip\":\"192.168.1.5x\"}");
+  CHECK(s.ip[3] == 50, "trailing junk refused");
+  apply(s, "{\"ipMode\":\"static\",\"mask\":\"255.255.0.0\"}");
+  CHECK(s.ipMode == IP_MODE_STATIC && s.mask[2] == 0, "static, /16");
+  JsonDocument doc;
+  settingsToJson(s, doc.to<JsonObject>(), false);
+  CHECK(strcmp(doc["ip"] | "", "192.168.1.50") == 0 && strcmp(doc["ipMode"] | "", "static") == 0, "exported");
+  apply(s, "{\"ipMode\":\"nonsense\"}");
+  CHECK(s.ipMode == IP_MODE_DHCP, "unknown mode -> DHCP");
+}
+
 int main() {
+  testAddress();
   testRadio();
   testSonos();
   testNamesSetTheMode();

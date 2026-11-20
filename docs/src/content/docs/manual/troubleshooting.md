@@ -75,7 +75,8 @@ The device tried the saved network for 30 seconds and gave up. The red line unde
 - "auth timed out" means the router did not finish checking the password in time. A wrong password can cause it, but so can a weak signal or a busy hotspot: retype the password, then move the device closer.
 - "network not found" means the network was not in range on 2.4 GHz. The device has no 5 GHz radio, and a router on channel 12, 13 or 14 can be invisible to it.
 - "security mode?" means the router asks for a security mode the device does not offer. Set the 2.4 GHz network to WPA2-PSK (AES), or to WPA2/WPA3 mixed mode without "PMF required".
-- "no IP (DHCP)" means the device joined but the router handed out no address. Check the router's DHCP pool and any MAC filter.
+- "no IP (DHCP)" means the device joined but the router handed out no address. Check the router's DHCP pool and any MAC filter. If it keeps happening although other devices get addresses, set a fixed fallback under **WiFi → Address**: the device then uses that address when no lease arrives.
+- "fixed address unreachable" means the device joined with the fixed address from **WiFi → Address**, but could not reach the internet with it. Check the gateway and subnet mask, and that no other device has the address.
 - "timed out" means the router never answered within 30 seconds. Move the device closer, and check that the router's 2.4 GHz radio is on a channel from 1 to 11.
 
 The number in brackets is the WiFi driver's reason code, worth quoting in an issue. While the hotspot is up and nobody is connected to it, the device retries the saved networks every 90 seconds and restarts on its own once one works.

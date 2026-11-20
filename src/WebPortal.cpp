@@ -328,7 +328,7 @@ static void handleStatus() {
   }
 #endif
   smalltv::writeStatusLoop(out, appLoopMaxMs(), appLoopSlowestStep(), appLoopSlowestStepMs());
-  smalltv::writeStatusRf(out, netRadioRecalCount());
+  smalltv::writeStatusRf(out, netRadioRecalCount(), netAddressSource());
   smalltv::writeStatusEnd(out);
   server.sendContent("", 0);   // the last chunk
 }
@@ -350,6 +350,12 @@ static String netFingerprint(const Settings& s) {
   f += (int)s.wifiTxQdBm;   // radio settings apply at boot, like the networks
   f += '/';
   f += (int)s.wifiPhy;
+  f += '/';
+  f += (int)s.ipMode;   // the address settings too
+  for (int i = 0; i < 4; i++) {
+    f += '.'; f += (int)s.ip[i]; f += ','; f += (int)s.mask[i];
+    f += ','; f += (int)s.gw[i]; f += ','; f += (int)s.dns[i];
+  }
   return f;
 }
 

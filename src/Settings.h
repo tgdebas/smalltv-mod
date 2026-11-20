@@ -232,6 +232,10 @@ struct Settings {
   uint8_t wifiTxQdBm;   // transmit power in quarter dBm, 0..82 (82 = 20.5 dBm, the SDK maximum)
   uint8_t wifiPhy;      // WIFI_PHY_* below: 802.11n, g or b
 
+  // --- Address on the saved network (WiFi tab, Address card) ---
+  uint8_t ipMode;       // IP_MODE_DHCP / IP_MODE_FALLBACK / IP_MODE_STATIC
+  uint8_t ip[4], mask[4], gw[4], dns[4];   // the fixed address; dns 0.0.0.0 = the gateway
+
   // --- Active feature ---
   String themeId;       // installed .stheme ID; empty until selected
   uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL / MODE_HA / MODE_SONOS / MODE_SYSMON

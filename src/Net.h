@@ -27,6 +27,10 @@ void        netAllowRetry(bool on);
 const char* netFailReason();
 uint16_t    netFailSeq();     // changes whenever netFailReason() does
 
+// How the station address was obtained: "DHCP", "fixed", or
+// "fixed (no DHCP lease)" for the Address card's fallback; "" in setup mode.
+const char* netAddressSource();
+
 // RF calibration (ESP8266): how many fresh calibrations this boot took (in
 // station mode) or have been tried so far (in setup mode); and a request for
 // a fresh one at the next boot (the WiFi tab's Recalibrate radio button).

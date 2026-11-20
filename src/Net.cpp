@@ -29,6 +29,12 @@ static const uint32_t kNoIpRestartMs = 45000;    // setup mode this long after "
 static const uint32_t kNoIpRestartSlowMs = 900000;   // after kNoIpQuickTries in a row: every 15 minutes
 static const uint32_t kNoIpQuickTries = 12;
 
+// The address on the saved network (WiFi tab, Address card). See beginJoin()
+// and fallbackDue().
+static bool        g_addrFixed = false;     // this attempt uses the fixed address
+static uint32_t    g_assocAt = 0;           // millis() this attempt associated; 0 = not yet
+static const char* g_addrSource = "";       // how the joined address was obtained
+
 #if !defined(SMALLTV_FAMILY_ESP32)
 // ---- RF calibration re-roll (see RF_PRE_INIT in main.cpp) -------------------
 // The count of calibrations tried in a row lives in RTC memory: it survives
@@ -151,12 +157,39 @@ static void applyRadio(const Settings* s) {
   WiFi.setPhyMode(phy == WIFI_PHY_SET_B ? WIFI_PHY_MODE_11B
                 : phy == WIFI_PHY_SET_G ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
   WiFi.setOutputPower(s ? s->wifiTxQdBm / 4.0f : WIFI_TX_DBM);
+  // Radio always on. In the SDK's default modem sleep the station wakes only
+  // for the router's beacons, and a DHCP offer sent as a broadcast between
+  // them is lost: "no IP" while the password was right. The stock firmware
+  // turns sleep off as well. Costs some power, which a USB device can spare.
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
 }
 #endif
 
-static void beginJoin(const WifiCred& n) {
+// The fixed address from the settings is filled in (and not "always DHCP").
+static bool fixedUsable(const Settings* s) {
+  return s && s->ipMode != IP_MODE_DHCP && s->ip[0] && s->gw[0] && s->mask[0];
+}
+
+// Fixed address on, or back to DHCP. Must run before WiFi.begin(): set while
+// already associated, the SDK takes the address but never reports the join.
+static void applyAddress(bool fixed) {
+  if (fixed && fixedUsable(g_cfg)) {
+    const Settings& s = *g_cfg;
+    IPAddress dns = s.dns[0] ? IPAddress(s.dns[0], s.dns[1], s.dns[2], s.dns[3])
+                             : IPAddress(s.gw[0], s.gw[1], s.gw[2], s.gw[3]);
+    WiFi.config(IPAddress(s.ip[0], s.ip[1], s.ip[2], s.ip[3]),
+                IPAddress(s.gw[0], s.gw[1], s.gw[2], s.gw[3]),
+                IPAddress(s.mask[0], s.mask[1], s.mask[2], s.mask[3]), dns);
+  } else {
+    WiFi.config(IPAddress((uint32_t)0), IPAddress((uint32_t)0), IPAddress((uint32_t)0));
+  }
+}
+
+static void beginJoin(const WifiCred& n, bool fixed = false) {
   g_lastReason = 0;
   g_assoc = false;
+  g_assocAt = 0;
+  g_addrFixed = (fixed || (g_cfg && g_cfg->ipMode == IP_MODE_STATIC)) && fixedUsable(g_cfg);
 #if !defined(SMALLTV_FAMILY_ESP32)
   // Put the PHY mode and TX power back to the SDK defaults before every join.
   // The SDK keeps its RF settings in flash, so after an install over the stock
@@ -166,7 +199,42 @@ static void beginJoin(const WifiCred& n) {
   // the defaults changes nothing for a device that already uses them.
   applyRadio(g_cfg);
 #endif
+  applyAddress(g_addrFixed);
   WiFi.begin(n.ssid.c_str(), n.pass.c_str());
+}
+
+// "DHCP, fixed address as fallback": once an attempt has been associated for
+// DHCP_FALLBACK_MS without a lease, rejoin the same network with the fixed
+// address. True when it did; the caller restarts its timeout. The "no IP"
+// case this is for: the router accepts the password but the DHCP exchange
+// (broadcasts) gets lost, while ordinary traffic to a known address works.
+static bool fallbackDue(const WifiCred& n) {
+  if (!g_cfg || g_cfg->ipMode != IP_MODE_FALLBACK || g_addrFixed || !fixedUsable(g_cfg)) return false;
+  if (!g_assoc || WiFi.status() == WL_CONNECTED) return false;
+  if (!g_assocAt) { g_assocAt = millis(); if (!g_assocAt) g_assocAt = 1; return false; }
+  if (millis() - g_assocAt < DHCP_FALLBACK_MS) return false;
+  Serial.println(F("[net] no DHCP lease: rejoining with the fixed address"));
+  WiFi.disconnect();
+  delay(100);
+  beginJoin(n, true);
+  return true;
+}
+
+// After a join with the fixed address: does it actually reach the network?
+// A typo (wrong gateway, an address on another subnet, one taken by another
+// device) would otherwise leave the device "connected" but unreachable, with
+// no setup hotspot to fix it from. A name lookup goes through the gateway and
+// the DNS server, so it fails in all those cases.
+static bool fixedAddressWorks() {
+  IPAddress ip;
+  for (int i = 0; i < 2; i++) {
+#if defined(SMALLTV_FAMILY_ESP32)
+    if (WiFi.hostByName("connectivitycheck.gstatic.com", ip) == 1) return true;
+#else
+    if (WiFi.hostByName("connectivitycheck.gstatic.com", ip, 4000) == 1) return true;
+#endif
+  }
+  return false;
 }
 
 static void startAP(const Settings& s) {
@@ -274,10 +342,29 @@ void netBegin(const Settings& s, void (*onProgress)(const char*)) {
     while (WiFi.status() != WL_CONNECTED && millis() - start < budget) {
       delay(200);
       yield();
+      if (fallbackDue(n)) {
+        if (onProgress) onProgress("WiFi: fixed address");
+        start = millis();
+      }
+    }
+
+    if (WiFi.status() == WL_CONNECTED && g_addrFixed && !fixedAddressWorks()) {
+      // Joined, but the fixed address goes nowhere: treat it as a failure
+      // and drop it, so setup mode can come up to fix the settings.
+      g_failText = n.ssid + F(": fixed address unreachable");
+      g_failSeq++;
+      g_lastFailNoIp = false;
+      Serial.println(F("[net] fixed address does not reach the network"));
+      WiFi.disconnect();
+      applyAddress(false);
+      delay(100);
+      continue;
     }
 
     if (WiFi.status() == WL_CONNECTED) {
       g_failText = "";
+      g_addrSource = !g_addrFixed ? "DHCP"
+                   : g_cfg->ipMode == IP_MODE_STATIC ? "fixed" : "fixed (no DHCP lease)";
       g_curNet = (int8_t)order[k];
       g_mode = NET_STA;
 #if !defined(SMALLTV_FAMILY_ESP32)
@@ -349,6 +436,10 @@ void netLoop() {
         delay(100);
         ESP.restart();
       }
+      if (!busy && fallbackDue(g_cfg->wifi[g_curNet])) {
+        g_attemptStart = millis();
+        if (!g_attemptStart) g_attemptStart = 1;
+      }
       uint32_t budget = g_seen[g_curNet] ? kJoinBudgetMs : kUnseenBudgetMs;
       if (busy || millis() - g_attemptStart > budget) {
         if (!busy) recordFailure(g_cfg->wifi[g_curNet].ssid);
@@ -404,4 +495,5 @@ int netRSSI() {
 
 void        netAllowRetry(bool on) { g_retryAllowed = on; }
 const char* netFailReason() { return g_failText.c_str(); }
+const char* netAddressSource() { return g_mode == NET_STA ? g_addrSource : ""; }
 uint16_t    netFailSeq()    { return g_failSeq; }

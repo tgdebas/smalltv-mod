@@ -259,9 +259,11 @@ template <class Out> void writeStatusLoop(Out& out, uint32_t maxMs, const char* 
 }
 
 // RF calibration (ESP8266): how many fresh calibrations this boot took.
-template <class Out> void writeStatusRf(Out& out, uint32_t recal) {
+// And how the address on the network was obtained (netAddressSource()).
+template <class Out> void writeStatusRf(Out& out, uint32_t recal, const char* addr = "") {
   using statusout::member;
   member(out, PSTR(",\"rf\":{\"recal\":"), recal);
+  member(out, PSTR(",\"addr\":"), addr);
   jsonout::raw(out, PSTR("}"));
 }
 
