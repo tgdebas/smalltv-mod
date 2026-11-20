@@ -16,8 +16,22 @@ static CrashRtc sample() {
 }
 
 int main() {
-  // The record is 12 words and must end inside the 128 user words from word 96.
-  assert(sizeof(CrashRtc) == 48);
+  // The record is 16 words and must end inside the 128 user words from word 96.
+  assert(sizeof(CrashRtc) == 64);
+  {
+    // Callers: code addresses only, nearest first, no repeats, at most four.
+    const uint32_t stack[] = {0x3ffef000u, 0x40212345u, 0u, 0x40212345u, 0x40101000u,
+                              0x4000df48u, 0x40230000u, 0x40240000u, 0x40250000u};
+    CrashRtc r;
+    memset(&r, 0, sizeof(r));
+    crashPickCallers(r, stack, stack + 9);
+    assert(r.caller[0] == 0x40212345u && r.caller[1] == 0x40101000u);
+    assert(r.caller[2] == 0x40230000u && r.caller[3] == 0x40240000u);
+    CrashRtc e;
+    memset(&e, 0, sizeof(e));
+    crashPickCallers(e, stack, stack + 1);
+    assert(e.caller[0] == 0);
+  }
   assert(96 + sizeof(CrashRtc) / 4 <= 128);
 
   // Labels: 253/254 get their own, the hardware watchdog is only REASON_WDT_RST.

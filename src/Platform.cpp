@@ -68,7 +68,7 @@ static void crashStore(CrashRtc& r) {
 // The core calls this from its exception, software-watchdog, abort and stack-smash handlers, with
 // the heap and the flash cache in whatever state the fault left them. So no
 // allocation and no Arduino String in here: static buffers and plain stores.
-extern "C" void custom_crash_callback(struct rst_info* ri, uint32_t, uint32_t) {
+extern "C" void custom_crash_callback(struct rst_info* ri, uint32_t stack, uint32_t stackEnd) {
   CrashRtc r;
   memset(&r, 0, sizeof(r));
   r.flags       = CRASH_PENDING;
@@ -79,6 +79,9 @@ extern "C" void custom_crash_callback(struct rst_info* ri, uint32_t, uint32_t) {
   r.rstReason   = ri->reason;
   r.uptimeKnown = 1;
   strlcpy(r.fw, FW_VERSION, sizeof(r.fw));
+  if (stack && stackEnd > stack && !(stack & 3))
+    crashPickCallers(r, reinterpret_cast<const uint32_t*>(stack),
+                     reinterpret_cast<const uint32_t*>(stackEnd));
   crashStore(r);
 }
 
@@ -120,6 +123,7 @@ bool platformCrashRecordGet(PlatformCrashRecord& out) {
   out.excvaddr    = r.excvaddr;
   out.uptimeS     = r.uptimeS;
   out.uptimeKnown = r.uptimeKnown != 0;
+  for (int i = 0; i < 4; i++) out.caller[i] = r.caller[i];
   return true;
 }
 

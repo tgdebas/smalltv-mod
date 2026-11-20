@@ -29,7 +29,26 @@ struct CrashRtc {
   uint8_t  uptimeKnown;
   uint16_t pad;
   char     fw[16];
+  uint32_t caller[4];   // code addresses found on the stack, nearest first; 0 = none
 };
+
+// Is v an address in program code (IRAM or the flash-mapped image)? Used to
+// pick return addresses off the stack at a crash, for addr2line: a fault in a
+// ROM routine such as memcpy names only the ROM, the caller is on the stack.
+static inline bool crashIsCodeAddr(uint32_t v) {
+  return (v >= 0x40100000u && v < 0x40110000u) || (v >= 0x40201000u && v < 0x40300000u);
+}
+// Fill caller[] from the stack words [from, to), nearest first, skipping repeats.
+static inline void crashPickCallers(CrashRtc& r, const uint32_t* from, const uint32_t* to) {
+  int n = 0;
+  for (const uint32_t* p = from; p < to && n < 4 && p - from < 512; p++) {
+    uint32_t v = *p;
+    if (!crashIsCodeAddr(v)) continue;
+    bool dup = false;
+    for (int i = 0; i < n; i++) if (r.caller[i] == v) dup = true;
+    if (!dup) r.caller[n++] = v;
+  }
+}
 
 static inline uint32_t crashCheck(const CrashRtc& r) {
   const uint8_t* p = reinterpret_cast<const uint8_t*>(&r) + 8;

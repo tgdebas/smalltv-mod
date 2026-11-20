@@ -268,6 +268,10 @@ static void handleStatus() {
     if (cr.hasRegisters) { k.exccause = cause; k.epc = epc; k.addr = addr; }
     k.hasUptime = cr.uptimeKnown;
     k.uptime = cr.uptimeS;
+    char callers[48] = "";
+    for (int i = 0, n = 0; i < 4 && cr.caller[i]; i++)
+      n += snprintf(callers + n, sizeof callers - n, "%s0x%08x", i ? " " : "", (unsigned)cr.caller[i]);
+    k.callers = callers;
     smalltv::writeStatusCrash(out, k);
   }
 #if WITH_TICKER

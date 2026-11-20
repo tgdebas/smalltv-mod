@@ -175,6 +175,7 @@ struct PlatformCrashRecord {
   uint32_t excvaddr;       // faulting address
   uint32_t uptimeS;        // seconds up before the crash, valid iff uptimeKnown
   bool     uptimeKnown;    // false for the hardware watchdog (no callback runs)
+  uint32_t caller[4];      // return addresses from the stack, for addr2line; 0 = none
 };
 // Call once at boot, before anything can reset the chip again.
 void platformCrashRecordBegin();

@@ -55,6 +55,7 @@ struct StatusCrash {
   const char *exccause = "", *epc = "", *addr = "";
   bool hasUptime = false;
   uint32_t uptime = 0;
+  const char* callers = "";   // "0x4020abcd 0x40212345", left out when empty
 };
 struct StatusTicker {
   const char* symbol = "";
@@ -170,6 +171,7 @@ template <class Out> void writeStatusCrash(Out& out, const StatusCrash& k) {
   if (k.epc[0]) member(out, PSTR(",\"epc\":"), k.epc);
   if (k.addr[0]) member(out, PSTR(",\"addr\":"), k.addr);
   if (k.hasUptime) member(out, PSTR(",\"uptime\":"), k.uptime);
+  if (k.callers[0]) member(out, PSTR(",\"callers\":"), k.callers);
   jsonout::raw(out, PSTR("}"));
 }
 
